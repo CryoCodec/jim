@@ -18,6 +18,7 @@ package cmd
 import (
 	"log"
 
+	"github.com/CryoCodec/jim/ipc"
 	jim "github.com/CryoCodec/jim/ipc"
 	"github.com/spf13/cobra"
 )
@@ -34,10 +35,11 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		client := jim.CreateClient()
-		isReady, error := jim.IsServerStatusReady(client)
-		if error != nil {
-			log.Fatal("Could not determine the server status. Is the daemon running?")
-		}
+		propagationChan := make(chan ipc.Message)
+		go jim.ReadMessage(client, propagationChan)
+
+		isReady := jim.IsServerStatusReady(client, propagationChan)
+
 		if isReady {
 			log.Println("Server is ready to get started")
 		} else {

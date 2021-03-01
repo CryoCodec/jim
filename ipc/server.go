@@ -1,6 +1,7 @@
 package ipc
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 
@@ -8,8 +9,7 @@ import (
 )
 
 func CreateServer() *ipc.Server {
-	serverConfig := &ipc.ServerConfig{Encryption: true}
-	sc, err := ipc.StartServer("jimssocket", serverConfig)
+	sc, err := ipc.StartServer("jimssocket", nil)
 	if err != nil {
 		log.Fatal("Could not start server, reason:", err)
 	}
@@ -28,12 +28,15 @@ func Listen(server *ipc.Server) {
 				log.Println("Error: " + err.Error())
 			case ReqStatus:
 				handleStatusRequest(server, &state)
+			case ReqAttemptDecryption:
+				handleDecryption(server, &state, m.Data)
 			default:
 				log.Println("Received message of type " + fmt.Sprint(m.MsgType) + ": " + string(m.Data))
 			}
 
 		} else {
 			// error case, just respond with error message
+			log.Println("Error:", err.Error())
 			server.Write(ResError, []byte(err.Error()))
 		}
 	}
@@ -48,5 +51,19 @@ func handleStatusRequest(server *ipc.Server, state *serverState) {
 		server.Write(ResReadyToServe, []byte{})
 	} else {
 		server.Write(ResNeedDecryption, []byte{})
+	}
+}
+
+func handleDecryption(server *ipc.Server, state *serverState, passphrase []byte) {
+	if state.isDecrypted {
+		server.Write(ResSuccess, []byte{})
+		return
+	}
+
+	if bytes.Compare(passphrase, []byte("decrypt")) == 0 {
+		state.isDecrypted = true
+		server.Write(ResSuccess, []byte{})
+	} else {
+		server.Write(ResDecryptionFailed, []byte{})
 	}
 }
