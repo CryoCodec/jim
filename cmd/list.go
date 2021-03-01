@@ -16,8 +16,9 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
+	"log"
 
+	jim "github.com/CryoCodec/jim/ipc"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +33,16 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("list called")
+		client := jim.CreateClient()
+		isReady, error := jim.IsServerStatusReady(client)
+		if error != nil {
+			log.Fatal("Could not determine the server status. Is the daemon running?")
+		}
+		if isReady {
+			log.Println("Server is ready to get started")
+		} else {
+			log.Println("Server is not ready, decryption is necessary")
+		}
 	},
 }
 
