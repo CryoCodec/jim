@@ -16,23 +16,75 @@ limitations under the License.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"syscall"
 
+	b64 "encoding/base64"
+
+	"github.com/CryoCodec/jim/crypto"
+	"github.com/CryoCodec/jim/files"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 // decryptCmd represents the decrypt command
 var decryptCmd = &cobra.Command{
-	Use:   "decrypt",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "decrypt path/to/file",
+	Short: "Decrypts the file at given path, so you may edit your configuration",
+	Long:  `Decrypts the file at given path, so you may edit your configuration. The file has to be encrypted by jim and must end with .enc`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("decrypt called")
+		if len(args) != 1 {
+			log.Fatal("Decrypt expects exactly 1 parameter")
+		}
+
+		if !files.Exists(args[0]) {
+			log.Fatal("The passed file does not exist or is a directory")
+		}
+
+		if filepath.Ext(args[0]) != ".enc" {
+			log.Fatal("The passed file did not end on .enc. The file must be encrypted with jim.")
+		}
+
+		fileContents, err := ioutil.ReadFile(args[0])
+		if err != nil {
+			log.Fatal("Error reading file: ", err.Error())
+		}
+
+		cipherText, err := b64.StdEncoding.DecodeString(string(fileContents))
+		if err != nil {
+			log.Fatal("Corrupt input file, failed at base64 decode. Reason: ", err.Error())
+		}
+
+		log.Println("Enter master password:")
+		password, err := terminal.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			log.Fatal("Error reading the password from terminal. Try again.")
+		}
+
+		clearText, err := crypto.Decrypt(password, cipherText)
+		if err != nil {
+			log.Fatal("Failed to decrypt the given content. Reason: ", err.Error())
+		}
+
+		destinationPath := strings.TrimSuffix(args[0], ".enc")
+
+		if files.Exists(destinationPath) {
+			log.Println(fmt.Sprintf("The destination path %s already exists, overwrite? (y/n)", destinationPath))
+			reader := bufio.NewReader(os.Stdin)
+			yes, _ := reader.ReadString('\n')
+			if strings.TrimSpace(yes) != "y" {
+				return
+			}
+		}
+
+		ioutil.WriteFile(destinationPath, []byte(clearText), 0644)
+		log.Println(fmt.Sprintf("Wrote output to %s", destinationPath))
 	},
 }
 

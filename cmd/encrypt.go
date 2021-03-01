@@ -16,23 +16,67 @@ limitations under the License.
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
+	"strings"
+	"syscall"
 
+	b64 "encoding/base64"
+
+	"github.com/CryoCodec/jim/crypto"
+	"github.com/CryoCodec/jim/files"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 // encryptCmd represents the encrypt command
 var encryptCmd = &cobra.Command{
-	Use:   "encrypt",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "encrypt path/to/file",
+	Short: "Encrypts the file at given path, so it can be used with jim",
+	Long: `Encrypts the file at path/to/file with a master password. 
+	The file may then be used with jim`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("encrypt called")
+		if len(args) != 1 {
+			log.Fatal("Encrypt expects exactly 1 parameter")
+		}
+
+		if !files.Exists(args[0]) {
+			log.Fatal("The passed file does not exist or is a directory")
+		}
+
+		fileContents, err := ioutil.ReadFile(args[0])
+		if err != nil {
+			log.Fatal("Error reading file: ", err.Error())
+		}
+
+		log.Println("Enter master password:")
+		password, err := terminal.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			log.Fatal("Error reading the password from terminal. Try again.")
+		}
+
+		cipherText, err := crypto.Encrypt(password, fileContents)
+		if err != nil {
+			log.Fatal("Failed to encrypt the given content. Reason: ", err.Error())
+		}
+
+		sEnc := b64.StdEncoding.EncodeToString(cipherText)
+		destinationPath := args[0] + ".enc"
+
+		if files.Exists(destinationPath) {
+			log.Println(fmt.Sprintf("The destination path %s already exists, overwrite? (y/n)", destinationPath))
+			reader := bufio.NewReader(os.Stdin)
+			yes, _ := reader.ReadString('\n')
+			if strings.TrimSpace(yes) != "y" {
+				return
+			}
+		}
+
+		ioutil.WriteFile(destinationPath, []byte(sEnc), 0644)
+		log.Println(fmt.Sprintf("Wrote output to %s", destinationPath))
 	},
 }
 
