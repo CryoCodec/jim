@@ -4,6 +4,7 @@ const (
 	ReqAttemptDecryption = iota + 1
 	ResDecryptionFailed
 	ReqLoadFile
+	ResRequireConfigFile
 	ReqCloseConnection
 	ReqStatus
 	ResReadyToServe
@@ -23,6 +24,7 @@ var msgCodeToString = map[uint16]string{
 	ReqAttemptDecryption: `REQ_ATTEMPT_DECRYPTION`,
 	ResDecryptionFailed:  `RES_DECRYPTION_FAILED`,
 	ReqLoadFile:          `REQ_LOAD_FILE`,
+	ResRequireConfigFile: `RES_REQUIRE_CONFIG_FILE`,
 	ReqCloseConnection:   `REQ_CLOSE_CONNECTION`,
 	ReqStatus:            `REQ_STATUS`,
 	ResReadyToServe:      `RES_READY_TO_SERVE`,

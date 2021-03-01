@@ -4,9 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/hex"
-	"fmt"
-	"log"
 
 	"golang.org/x/crypto/scrypt"
 )
@@ -16,8 +13,6 @@ func Encrypt(password, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	log.Println(fmt.Sprintf("key=%s, salt=%s", hex.EncodeToString(key), hex.EncodeToString(salt)))
 
 	blockCipher, err := aes.NewCipher(key)
 	if err != nil {
@@ -48,8 +43,6 @@ func Decrypt(password, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	log.Println(fmt.Sprintf("key=%s, salt=%s", hex.EncodeToString(key), hex.EncodeToString(salt)))
 
 	blockCipher, err := aes.NewCipher(key)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CryoCodec/jim/files"
 	ipc "github.com/james-barrow/golang-ipc"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -36,12 +37,14 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 		writetoServer(client, ReqStatus, []byte{})
 		message := <-propagationChan
 		switch message.Code {
+		case ResRequireConfigFile:
+			loadConfigFile(client, propagationChan)
 		case ResNeedDecryption:
 			requestPWandDecrypt(client, propagationChan)
 		case ResReadyToServe:
 			return true
 		default:
-			log.Fatal("Received unexpected message, when requesting server status.")
+			log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting server status.", msgCodeToString[uint16(message.Code)]))
 		}
 	}
 }
@@ -94,8 +97,21 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 		case ResSuccess:
 			return
 		default:
-			log.Fatal("Client received unexpected message: " + msgCodeToString[uint16(response.Code)] + ": " + string(response.Payload))
+			log.Fatal(fmt.Sprintf("Received unexpected message %s, when attempting decryption.", msgCodeToString[uint16(response.Code)]))
 		}
+	}
+}
+
+func loadConfigFile(client *ipc.Client, propagationChan chan Message) {
+	path := files.GetJimConfigPath()
+	writetoServer(client, ReqLoadFile, []byte(path))
+	switch response := <-propagationChan; response.Code {
+	case ResError:
+		log.Fatal(fmt.Sprintf("Server failed to load config file, reason: %s", string(response.Payload)))
+	case ResSuccess:
+		return
+	default:
+		log.Fatal(fmt.Sprintf("Received unexpected message %s, when loading config file", msgCodeToString[uint16(response.Code)]))
 	}
 }
 
