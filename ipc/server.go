@@ -9,6 +9,8 @@ import (
 
 	"github.com/CryoCodec/jim/crypto"
 	"github.com/CryoCodec/jim/files"
+	"github.com/CryoCodec/jim/model"
+
 	ipc "github.com/james-barrow/golang-ipc"
 )
 
@@ -54,7 +56,7 @@ func Listen(server *ipc.Server) {
 type serverState struct {
 	isDecrypted           bool
 	encryptedFileContents []byte
-	clearText             []byte
+	jsonConfig            model.JimConfig
 }
 
 func handleStatusRequest(server *ipc.Server, state *serverState) {
@@ -93,7 +95,13 @@ func handleDecryption(server *ipc.Server, state *serverState, passphrase []byte)
 		return
 	}
 
-	state.clearText = clearText
+	parsed, err := model.UnmarshalJimConfig(clearText)
+	if err != nil {
+		server.Write(ResJsonDeserializationFailed, []byte(fmt.Sprintf("Failed to unmarshal json config. Reason: %s", err.Error())))
+		return
+	}
+
+	state.jsonConfig = parsed
 	state.isDecrypted = true
 	server.Write(ResSuccess, []byte{})
 }

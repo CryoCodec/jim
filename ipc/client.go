@@ -96,8 +96,10 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 			continue
 		case ResSuccess:
 			return
+		case ResJsonDeserializationFailed:
+			log.Fatal(fmt.Sprintf("Config file is corrupted. Could not unmarshal json. Please correct your config file. Error: %s", string(response.Payload)))
 		default:
-			log.Fatal(fmt.Sprintf("Received unexpected message %s, when attempting decryption.", msgCodeToString[uint16(response.Code)]))
+			log.Fatal(fmt.Sprintf("Received unexpected message %s, when attempting decryption. Error: %s", msgCodeToString[uint16(response.Code)], string(response.Payload)))
 		}
 	}
 }
