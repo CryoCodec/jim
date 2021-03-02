@@ -16,7 +16,9 @@ limitations under the License.
 package cmd
 
 import (
+	"fmt"
 	"log"
+	"sort"
 
 	"github.com/CryoCodec/jim/ipc"
 	jim "github.com/CryoCodec/jim/ipc"
@@ -26,13 +28,8 @@ import (
 // listCmd represents the list command
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Lists all entries in the configuration file",
+	Long:  `Lists all entries in the configuration file`,
 	Run: func(cmd *cobra.Command, args []string) {
 		client := jim.CreateClient()
 		propagationChan := make(chan ipc.Message)
@@ -41,9 +38,17 @@ to quickly create a Cobra application.`,
 		isReady := jim.IsServerStatusReady(client, propagationChan)
 
 		if isReady {
-			log.Println("Server is ready to get started")
+			entries := jim.ListEntries(client, propagationChan)
+			sort.Sort(entries)
+			for _, entry := range entries {
+				fmt.Println(entry.Title)
+				sort.Strings(entry.Content)
+				for _, val := range entry.Content {
+					fmt.Println(val)
+				}
+			}
 		} else {
-			log.Println("Server is not ready, decryption is necessary")
+			log.Fatal("Server is not ready, this is likely an implementation error.")
 		}
 	},
 }

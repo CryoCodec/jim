@@ -40,6 +40,8 @@ func Listen(server *ipc.Server) {
 				handleStatusRequest(server, &state)
 			case ReqAttemptDecryption:
 				handleDecryption(server, &state, m.Data)
+			case ReqListEntries:
+				handleListRequest(server, &state)
 			default:
 				log.Println("Received message of type " + fmt.Sprint(m.MsgType) + ": " + string(m.Data))
 			}
@@ -123,4 +125,36 @@ func handleLoadFile(server *ipc.Server, state *serverState, payload []byte) {
 	state.isDecrypted = false
 
 	server.Write(ResSuccess, []byte{})
+}
+
+func handleListRequest(server *ipc.Server, state *serverState) {
+	if !state.isDecrypted {
+		if state.isDecrypted {
+			server.Write(ResNeedDecryption, []byte("Need Decryption"))
+			return
+		}
+	}
+
+	var result model.ListResponse
+	groupings := make(map[string][]string)
+	for _, config := range state.jsonConfig {
+		title := fmt.Sprintf("%s - %s", config.Group, config.Env)
+		value := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
+		valSlice := groupings[title]
+		valSlice = append(valSlice, value)
+		groupings[title] = valSlice
+	}
+
+	for k, v := range groupings {
+		el := model.ListResponseElement{Title: k, Content: v}
+		result = append(result, el)
+	}
+
+	message, err := result.Marshal()
+	if err != nil {
+		server.Write(ResError, []byte("Failed to serialize json content. This is likely an implementation error"))
+		return
+	}
+
+	server.Write(ResListEntries, message)
 }

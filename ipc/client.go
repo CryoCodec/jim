@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/CryoCodec/jim/files"
+	"github.com/CryoCodec/jim/model"
 	ipc "github.com/james-barrow/golang-ipc"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -44,7 +45,28 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 		case ResReadyToServe:
 			return true
 		default:
-			log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting server status.", msgCodeToString[uint16(message.Code)]))
+			log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
+		}
+	}
+}
+
+func ListEntries(client *ipc.Client, propagationChan chan Message) model.ListResponse {
+	for {
+		writetoServer(client, ReqListEntries, []byte{})
+		message := <-propagationChan
+		switch message.Code {
+		case ResListEntries:
+			result, err := model.UnmarshalListResponse(message.Payload)
+			if err != nil {
+				log.Fatal("Failed to deserialize json response. This is likely an implementation bug. Reason: ", err.Error())
+			}
+			return result
+		case ResNeedDecryption:
+			log.Fatal("Server was in wrong state. This is likely an implementation bug.")
+		case ResError:
+			log.Fatal("Server error: ", string(message.Payload))
+		default:
+			log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
 		}
 	}
 }

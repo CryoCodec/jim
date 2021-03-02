@@ -6,6 +6,8 @@ const (
 	ResJsonDeserializationFailed
 	ReqLoadFile
 	ResRequireConfigFile
+	ReqListEntries
+	ResListEntries
 	ReqCloseConnection
 	ReqStatus
 	ResReadyToServe
@@ -33,4 +35,6 @@ var msgCodeToString = map[uint16]string{
 	ResNeedDecryption:            `RES_NEED_DECRYPTION`,
 	ResSuccess:                   `RES_SUCCESS`,
 	ResError:                     `RES_ERROR`,
+	ResListEntries:               `RES_LIST_ENTRIES`,
+	ReqListEntries:               `REQ_LIST_ENTRIES`,
 }
