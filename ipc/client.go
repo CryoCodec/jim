@@ -51,24 +51,43 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 }
 
 func ListEntries(client *ipc.Client, propagationChan chan Message) model.ListResponse {
-	for {
-		writetoServer(client, ReqListEntries, []byte{})
-		message := <-propagationChan
-		switch message.Code {
-		case ResListEntries:
-			result, err := model.UnmarshalListResponse(message.Payload)
-			if err != nil {
-				log.Fatal("Failed to deserialize json response. This is likely an implementation bug. Reason: ", err.Error())
-			}
-			return result
-		case ResNeedDecryption:
-			log.Fatal("Server was in wrong state. This is likely an implementation bug.")
-		case ResError:
-			log.Fatal("Server error: ", string(message.Payload))
-		default:
-			log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
+	writetoServer(client, ReqListEntries, []byte{})
+	message := <-propagationChan
+	switch message.Code {
+	case ResListEntries:
+		result, err := model.UnmarshalListResponse(message.Payload)
+		if err != nil {
+			log.Fatal("Failed to deserialize json response. This is likely an implementation bug. Reason: ", err.Error())
 		}
+		return result
+	case ResNeedDecryption:
+		log.Fatal("Server was in wrong state. This is likely an implementation bug.")
+	case ResError:
+		log.Fatal("Server error: ", string(message.Payload))
+	default:
+		log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
 	}
+	panic("reached unreachable code. ( Well wasn't so unreachable after all, hu? )")
+}
+
+func GetMatchingServer(query string, client *ipc.Client, propagationChan chan Message) model.MatchResponse {
+	writetoServer(client, ReqClosestMatch, []byte(query))
+	message := <-propagationChan
+	switch message.Code {
+	case ResClosestMatch:
+		result, err := model.UnmarshalMatchResponse(message.Payload)
+		if err != nil {
+			log.Fatal("Failed to deserialize json response. This is likely an implementation bug. Reason: ", err.Error())
+		}
+		return result
+	case ResNoMatch:
+		log.Fatal("No Server matched your query.")
+	case ResError:
+		log.Fatal("Server error: ", string(message.Payload))
+	default:
+		log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
+	}
+	panic("reached unreachable code. ( Well wasn't so unreachable after all, hu? )")
 }
 
 func ReadMessage(client *ipc.Client, propagationChan chan Message) (interface{}, error) {

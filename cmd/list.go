@@ -20,7 +20,6 @@ import (
 	"log"
 	"sort"
 
-	"github.com/CryoCodec/jim/ipc"
 	jim "github.com/CryoCodec/jim/ipc"
 	"github.com/spf13/cobra"
 )
@@ -32,7 +31,7 @@ var listCmd = &cobra.Command{
 	Long:  `Lists all entries in the configuration file`,
 	Run: func(cmd *cobra.Command, args []string) {
 		client := jim.CreateClient()
-		propagationChan := make(chan ipc.Message)
+		propagationChan := make(chan jim.Message)
 		go jim.ReadMessage(client, propagationChan)
 
 		isReady := jim.IsServerStatusReady(client, propagationChan)

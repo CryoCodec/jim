@@ -8,6 +8,9 @@ const (
 	ResRequireConfigFile
 	ReqListEntries
 	ResListEntries
+	ReqClosestMatch
+	ResClosestMatch
+	ResNoMatch
 	ReqCloseConnection
 	ReqStatus
 	ResReadyToServe
@@ -37,4 +40,7 @@ var msgCodeToString = map[uint16]string{
 	ResError:                     `RES_ERROR`,
 	ResListEntries:               `RES_LIST_ENTRIES`,
 	ReqListEntries:               `REQ_LIST_ENTRIES`,
+	ReqClosestMatch:              `REQ_CLOSEST_MATCH`,
+	ResClosestMatch:              `RES_CLOSEST_MATCH`,
+	ResNoMatch:                   `RES_NO_MATCH`,
 }

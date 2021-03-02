@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strings"
 
 	b64 "encoding/base64"
 
 	"github.com/CryoCodec/jim/crypto"
 	"github.com/CryoCodec/jim/files"
 	"github.com/CryoCodec/jim/model"
+	"github.com/schollz/closestmatch"
 
 	ipc "github.com/james-barrow/golang-ipc"
 )
@@ -42,6 +44,8 @@ func Listen(server *ipc.Server) {
 				handleDecryption(server, &state, m.Data)
 			case ReqListEntries:
 				handleListRequest(server, &state)
+			case ReqClosestMatch:
+				handleClosestMatch(server, &state, string(m.Data))
 			default:
 				log.Println("Received message of type " + fmt.Sprint(m.MsgType) + ": " + string(m.Data))
 			}
@@ -59,6 +63,7 @@ type serverState struct {
 	isDecrypted           bool
 	encryptedFileContents []byte
 	jsonConfig            model.JimConfig
+	matcher               *closestmatch.ClosestMatch
 }
 
 func handleStatusRequest(server *ipc.Server, state *serverState) {
@@ -103,6 +108,13 @@ func handleDecryption(server *ipc.Server, state *serverState, passphrase []byte)
 		return
 	}
 
+	var dict []string
+	for _, config := range parsed {
+		dict = append(dict, config.Tag)
+	}
+
+	bagSize := []int{2, 3, 4, 5}
+	state.matcher = closestmatch.New(dict, bagSize)
 	state.jsonConfig = parsed
 	state.isDecrypted = true
 	server.Write(ResSuccess, []byte{})
@@ -157,4 +169,24 @@ func handleListRequest(server *ipc.Server, state *serverState) {
 	}
 
 	server.Write(ResListEntries, message)
+}
+
+func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
+	match := state.matcher.Closest(strings.ToLower(query))
+
+	for _, config := range state.jsonConfig {
+		if config.Tag == match {
+			connectionString := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
+			response := model.MatchResponse{Connection: connectionString, Server: config.Server}
+			payload, err := response.Marshal()
+			if err != nil {
+				server.Write(ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
+				return
+			}
+			server.Write(ResClosestMatch, payload)
+			return
+		}
+	}
+
+	server.Write(ResNoMatch, []byte{})
 }

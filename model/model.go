@@ -24,8 +24,24 @@ type JimConfigElement struct {
 type Server struct {
 	Host     string `json:"host"`
 	Dir      string `json:"dir"`
+	Port     string `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+}
+
+type MatchResponse struct {
+	Connection string `json:"connection"`
+	Server     Server `json:"server"`
+}
+
+func UnmarshalMatchResponse(data []byte) (MatchResponse, error) {
+	var s MatchResponse
+	err := json.Unmarshal(data, &s)
+	return s, err
+}
+
+func (s *MatchResponse) Marshal() ([]byte, error) {
+	return json.Marshal(s)
 }
 
 type ListResponse []ListResponseElement
