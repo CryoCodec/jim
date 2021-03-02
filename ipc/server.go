@@ -141,10 +141,8 @@ func handleLoadFile(server *ipc.Server, state *serverState, payload []byte) {
 
 func handleListRequest(server *ipc.Server, state *serverState) {
 	if !state.isDecrypted {
-		if state.isDecrypted {
-			server.Write(ResNeedDecryption, []byte("Need Decryption"))
-			return
-		}
+		server.Write(ResNeedDecryption, []byte("Need Decryption"))
+		return
 	}
 
 	var result model.ListResponse
@@ -172,6 +170,11 @@ func handleListRequest(server *ipc.Server, state *serverState) {
 }
 
 func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
+	if !state.isDecrypted {
+		server.Write(ResNeedDecryption, []byte("Need Decryption"))
+		return
+	}
+
 	match := state.matcher.Closest(strings.ToLower(query))
 
 	for _, config := range state.jsonConfig {
