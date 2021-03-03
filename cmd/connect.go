@@ -35,7 +35,7 @@ var connectCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		client := jim.CreateClient()
 		propagationChan := make(chan jim.Message)
-		go jim.ReadMessage(client, propagationChan)
+		go jim.ReadMessage(client, propagationChan, Verbose)
 
 		isReady := jim.IsServerStatusReady(client, propagationChan)
 

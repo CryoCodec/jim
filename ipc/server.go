@@ -47,7 +47,7 @@ func Listen(server *ipc.Server) {
 			case ReqClosestMatch:
 				handleClosestMatch(server, &state, string(m.Data))
 			default:
-				log.Println("Received message of type " + fmt.Sprint(m.MsgType) + ": " + string(m.Data))
+				log.Println("Received unexpected message of type " + fmt.Sprint(m.MsgType) + ": " + string(m.Data))
 			}
 
 		} else {

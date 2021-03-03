@@ -87,10 +87,10 @@ func GetMatchingServer(query string, client *ipc.Client, propagationChan chan Me
 	default:
 		log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
 	}
-	panic("reached unreachable code. ( Well wasn't so unreachable after all, hu? )")
+	panic("reached unreachable code. ( Well, wasn't so unreachable after all, hu? )")
 }
 
-func ReadMessage(client *ipc.Client, propagationChan chan Message) (interface{}, error) {
+func ReadMessage(client *ipc.Client, propagationChan chan Message, verbose bool) (interface{}, error) {
 	errorCounter := 0
 	for {
 		m, err := client.Read()
@@ -100,8 +100,9 @@ func ReadMessage(client *ipc.Client, propagationChan chan Message) (interface{},
 		}
 		switch m.MsgType {
 		case -1: // message type -1 is status change and only used internally
-			// once a verbosity flag is implemented, this may print additional information
-			log.Println("Status update: " + m.Status)
+			if verbose {
+				log.Println("Status update: " + m.Status)
+			}
 		case -2: // message type -2 is an error, these won't automatically cause the recieve channel to close.
 			log.Println("Error: " + err.Error())
 			errorCounter++
@@ -110,7 +111,9 @@ func ReadMessage(client *ipc.Client, propagationChan chan Message) (interface{},
 			}
 			time.Sleep(200 * time.Millisecond)
 		default:
-			log.Println("Client received message: " + msgCodeToString[uint16(m.MsgType)] + ": " + string(m.Data))
+			if verbose {
+				log.Println("Client received message: " + msgCodeToString[uint16(m.MsgType)])
+			}
 			propagationChan <- Message{Code(m.MsgType), m.Data}
 		}
 	}
