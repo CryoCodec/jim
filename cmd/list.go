@@ -31,6 +31,7 @@ var listCmd = &cobra.Command{
 	Long:  `Lists all entries in the configuration file`,
 	Run: func(cmd *cobra.Command, args []string) {
 		client := jim.CreateClient()
+		defer client.Close()
 		propagationChan := make(chan jim.Message)
 		go jim.ReadMessage(client, propagationChan, Verbose)
 

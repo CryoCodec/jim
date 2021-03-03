@@ -41,6 +41,7 @@ var connectCmd = &cobra.Command{
 
 		if isReady {
 			response := jim.GetMatchingServer(strings.Join(args, " "), client, propagationChan)
+			client.Close()
 			log.Println("Connection: ", response.Connection)
 			err := connectToServer(&response.Server)
 			if err != nil {

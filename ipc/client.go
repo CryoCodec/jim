@@ -12,14 +12,6 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-type GenericError struct {
-	message string
-}
-
-func (e *GenericError) Error() string {
-	return fmt.Sprintf("Error: %s", e.message)
-}
-
 func CreateClient() *ipc.Client {
 	config := &ipc.ClientConfig{
 		Timeout:    2,
@@ -45,7 +37,7 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 		case ResReadyToServe:
 			return true
 		default:
-			log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
+			die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
 		}
 	}
 }
@@ -57,15 +49,15 @@ func ListEntries(client *ipc.Client, propagationChan chan Message) model.ListRes
 	case ResListEntries:
 		result, err := model.UnmarshalListResponse(message.Payload)
 		if err != nil {
-			log.Fatal("Failed to deserialize json response. This is likely an implementation bug. Reason: ", err.Error())
+			die(fmt.Sprintf("Failed to deserialize json response. This is likely an implementation bug. Reason: %s", err.Error()), client)
 		}
 		return result
 	case ResNeedDecryption:
-		log.Fatal("Server was in wrong state. This is likely an implementation bug.")
+		die("Server was in wrong state. This is likely an implementation bug.", client)
 	case ResError:
-		log.Fatal("Server error: ", string(message.Payload))
+		die(fmt.Sprintf("Server error: %s", string(message.Payload)), client)
 	default:
-		log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
+		die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
 	}
 	panic("reached unreachable code. ( Well wasn't so unreachable after all, hu? )")
 }
@@ -77,26 +69,29 @@ func GetMatchingServer(query string, client *ipc.Client, propagationChan chan Me
 	case ResClosestMatch:
 		result, err := model.UnmarshalMatchResponse(message.Payload)
 		if err != nil {
-			log.Fatal("Failed to deserialize json response. This is likely an implementation bug. Reason: ", err.Error())
+			die(fmt.Sprintf("Failed to deserialize json response. This is likely an implementation bug. Reason: %s", err.Error()), client)
 		}
 		return result
 	case ResNoMatch:
-		log.Fatal("No Server matched your query.")
+		die("No Server matched your query.", client)
 	case ResError:
-		log.Fatal("Server error: ", string(message.Payload))
+		die(fmt.Sprintf("Server error: %s", string(message.Payload)), client)
 	default:
-		log.Fatal(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]))
+		die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
 	}
 	panic("reached unreachable code. ( Well, wasn't so unreachable after all, hu? )")
 }
 
-func ReadMessage(client *ipc.Client, propagationChan chan Message, verbose bool) (interface{}, error) {
+func ReadMessage(client *ipc.Client, propagationChan chan Message, verbose bool) {
 	errorCounter := 0
 	for {
 		m, err := client.Read()
 
 		if err != nil {
-			log.Fatal("IPC Communication breakdown. Reason: ", err.Error())
+			if !(err.Error() == "Client has closed the connection") { // this message will always be sent, once we close the client intentionally
+				die(fmt.Sprintf("IPC Communication breakdown. Reason: %s ", err.Error()), client)
+			}
+			return
 		}
 		switch m.MsgType {
 		case -1: // message type -1 is status change and only used internally
@@ -107,7 +102,7 @@ func ReadMessage(client *ipc.Client, propagationChan chan Message, verbose bool)
 			log.Println("Error: " + err.Error())
 			errorCounter++
 			if errorCounter > 10 {
-				log.Fatal("Exhausted retry budget, application will exit. Please try again.")
+				die("Exhausted retry budget, application will exit. Please try again.", client)
 			}
 			time.Sleep(200 * time.Millisecond)
 		default:
@@ -123,7 +118,7 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 	attempt := 3
 	for {
 		if attempt == 0 {
-			log.Fatal("No more attempts left, exiting.")
+			die("No more attempts left, exiting.", client)
 		}
 		log.Println("Enter master password:")
 		bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
@@ -141,9 +136,9 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 		case ResSuccess:
 			return
 		case ResJsonDeserializationFailed:
-			log.Fatal(fmt.Sprintf("Config file is corrupted. Could not unmarshal json. Please correct your config file. Error: %s", string(response.Payload)))
+			die(fmt.Sprintf("Config file is corrupted. Could not unmarshal json. Please correct your config file. Error: %s", string(response.Payload)), client)
 		default:
-			log.Fatal(fmt.Sprintf("Received unexpected message %s, when attempting decryption. Error: %s", msgCodeToString[uint16(response.Code)], string(response.Payload)))
+			die(fmt.Sprintf("Received unexpected message %s, when attempting decryption. Error: %s", msgCodeToString[uint16(response.Code)], string(response.Payload)), client)
 		}
 	}
 }
@@ -157,7 +152,7 @@ func loadConfigFile(client *ipc.Client, propagationChan chan Message) {
 	case ResSuccess:
 		return
 	default:
-		log.Fatal(fmt.Sprintf("Received unexpected message %s, when loading config file", msgCodeToString[uint16(response.Code)]))
+		die(fmt.Sprintf("Received unexpected message %s, when loading config file", msgCodeToString[uint16(response.Code)]), client)
 	}
 }
 
@@ -173,6 +168,13 @@ func writetoServer(client *ipc.Client, msgType int, message []byte) {
 
 	err := client.Write(msgType, message)
 	if err != nil {
-		log.Fatal("Error writing to server:", err.Error())
+		die(fmt.Sprintf("Error writing to server: %s", err.Error()), client)
 	}
+}
+
+func die(message string, client *ipc.Client) {
+	if client != nil {
+		client.Close()
+	}
+	log.Fatal(message)
 }

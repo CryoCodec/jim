@@ -175,6 +175,23 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 		return
 	}
 
+	// first we try to find the exact match. It can be annoying, when similar tags are used
+	// and the wrong one is returned
+	for _, config := range state.jsonConfig {
+		if config.Tag == query {
+			connectionString := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
+			response := model.MatchResponse{Connection: connectionString, Server: config.Server}
+			payload, err := response.Marshal()
+			if err != nil {
+				server.Write(ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
+				return
+			}
+			server.Write(ResClosestMatch, payload)
+			return
+		}
+	}
+
+	// now we try to find the closest match
 	match := state.matcher.Closest(strings.ToLower(query))
 
 	for _, config := range state.jsonConfig {
