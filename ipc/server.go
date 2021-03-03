@@ -4,7 +4,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"os/signal"
+	"path/filepath"
 	"strings"
+	"syscall"
 
 	b64 "encoding/base64"
 
@@ -25,6 +29,16 @@ func CreateServer() *ipc.Server {
 }
 
 func Listen(server *ipc.Server) {
+	f := runSetup()
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		f.Close()
+		os.Exit(1)
+	}()
+
 	state := serverState{isDecrypted: false, encryptedFileContents: nil}
 
 	for {
@@ -54,6 +68,7 @@ func Listen(server *ipc.Server) {
 			// error case, something went terribly wrong
 			// try to give a reason, however this message will probably not be received
 			server.Write(ResError, []byte(err.Error()))
+			f.Close()
 			log.Fatal("Fatal error:", err.Error())
 		}
 	}
@@ -209,4 +224,23 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 	}
 
 	server.Write(ResNoMatch, []byte{})
+}
+
+func runSetup() *os.File {
+	jimDir := files.GetJimConfigDir()
+	if _, err := os.Stat(jimDir); os.IsNotExist(err) {
+		err := os.Mkdir(jimDir, 0744)
+		if err != nil {
+			log.Fatal("Failed to create jim's config directory", jimDir)
+		}
+	}
+
+	f, err := os.OpenFile(filepath.Join(jimDir, "jim-server.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0744)
+	if err != nil {
+		log.Fatalf("Failed to open jim's log file: %v", err)
+	}
+
+	log.SetOutput(f)
+	log.Println("Setup succeeded")
+	return f
 }

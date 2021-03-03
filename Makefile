@@ -1,9 +1,10 @@
 build: 
 	go build -o build/jimServer bin/jimServer/main.go
-	go build -o build/jim bin/jimClient/main.go
+	go build -o build/jimClient bin/jimClient/main.go
+	cp static/* build/
 
 build-client:
-	go build -o build/jim bin/jimClient/main.go
+	go build -o build/jimClient bin/jimClient/main.go
 
 build-server:
 	go build -o build/jimServer bin/jimServer/main.go

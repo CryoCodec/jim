@@ -144,7 +144,7 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 }
 
 func loadConfigFile(client *ipc.Client, propagationChan chan Message) {
-	path := files.GetJimConfigPath()
+	path := files.GetJimConfigFilePath()
 	writetoServer(client, ReqLoadFile, []byte(path))
 	switch response := <-propagationChan; response.Code {
 	case ResError:
