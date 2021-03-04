@@ -51,17 +51,23 @@ func Listen(server *ipc.Server) {
 			case -2: // internal error
 				log.Println("Error: " + err.Error())
 			case ReqLoadFile:
+				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleLoadFile(server, &state, m.Data)
 			case ReqStatus:
+				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleStatusRequest(server, &state)
 			case ReqAttemptDecryption:
+				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleDecryption(server, &state, m.Data)
 			case ReqListEntries:
+				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleListRequest(server, &state)
 			case ReqClosestMatch:
+				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleClosestMatch(server, &state, string(m.Data))
 			default:
-				log.Println("Received unexpected message of type " + fmt.Sprint(m.MsgType) + ": " + string(m.Data))
+				log.Println("Received unexpected message of type " + msgCodeToString[uint16(m.MsgType)] + ": " + string(m.Data))
+				answer(server, ResError, []byte(fmt.Sprintf("Received unexpected message of type %s", msgCodeToString[uint16(m.MsgType)])))
 			}
 
 		} else {
@@ -83,43 +89,43 @@ type serverState struct {
 
 func handleStatusRequest(server *ipc.Server, state *serverState) {
 	if state.encryptedFileContents == nil {
-		server.Write(ResRequireConfigFile, []byte{})
+		answer(server, ResRequireConfigFile, []byte{})
 		return
 	}
 
 	if state.isDecrypted {
-		server.Write(ResReadyToServe, []byte{})
+		answer(server, ResReadyToServe, []byte{})
 	} else {
-		server.Write(ResNeedDecryption, []byte{})
+		answer(server, ResNeedDecryption, []byte{})
 	}
 }
 
 func handleDecryption(server *ipc.Server, state *serverState, passphrase []byte) {
 	if state.encryptedFileContents == nil {
-		server.Write(ResError, []byte("No configuration was loaded."))
+		answer(server, ResError, []byte("No configuration was loaded."))
 		return
 	}
 
 	if state.isDecrypted {
-		server.Write(ResSuccess, []byte{})
+		answer(server, ResSuccess, []byte{})
 		return
 	}
 
 	cipherText, err := b64.StdEncoding.DecodeString(string(state.encryptedFileContents))
 	if err != nil {
-		server.Write(ResDecryptionFailed, []byte(fmt.Sprintf("Corrupt configuration file, failed at base64 decode. Reason: %s", err.Error())))
+		answer(server, ResDecryptionFailed, []byte(fmt.Sprintf("Corrupt configuration file, failed at base64 decode. Reason: %s", err.Error())))
 		return
 	}
 
 	clearText, err := crypto.Decrypt(passphrase, cipherText)
 	if err != nil {
-		server.Write(ResDecryptionFailed, []byte(fmt.Sprintf("Failed to decrypt the configuration file. Reason: %s", err.Error())))
+		answer(server, ResDecryptionFailed, []byte(fmt.Sprintf("Failed to decrypt the configuration file. Reason: %s", err.Error())))
 		return
 	}
 
 	parsed, err := model.UnmarshalJimConfig(clearText)
 	if err != nil {
-		server.Write(ResJsonDeserializationFailed, []byte(fmt.Sprintf("Failed to unmarshal json config. Reason: %s", err.Error())))
+		answer(server, ResJsonDeserializationFailed, []byte(fmt.Sprintf("Failed to unmarshal json config. Reason: %s", err.Error())))
 		return
 	}
 
@@ -132,39 +138,38 @@ func handleDecryption(server *ipc.Server, state *serverState, passphrase []byte)
 	state.matcher = closestmatch.New(dict, bagSize)
 	state.jsonConfig = parsed
 	state.isDecrypted = true
-	server.Write(ResSuccess, []byte{})
+	answer(server, ResSuccess, []byte{})
 }
 
 func handleLoadFile(server *ipc.Server, state *serverState, payload []byte) {
 	path := string(payload)
 	if !files.Exists(path) {
-		server.Write(ResError, []byte(fmt.Sprintf("File at %s does not exist or is a directory", path)))
+		answer(server, ResError, []byte(fmt.Sprintf("File at %s does not exist or is a directory", path)))
 		return
 	}
 
 	fileContents, err := ioutil.ReadFile(path)
 	if err != nil {
-		server.Write(ResError, []byte(fmt.Sprintf("Could not read file at %s, reason: %s", path, err.Error())))
+		answer(server, ResError, []byte(fmt.Sprintf("Could not read file at %s, reason: %s", path, err.Error())))
 		return
 	}
 
 	state.encryptedFileContents = fileContents
 	state.isDecrypted = false
 
-	server.Write(ResSuccess, []byte{})
+	answer(server, ResSuccess, []byte{})
 }
 
 func handleListRequest(server *ipc.Server, state *serverState) {
 	if !state.isDecrypted {
-		server.Write(ResNeedDecryption, []byte("Need Decryption"))
+		answer(server, ResNeedDecryption, []byte("Need Decryption"))
 		return
 	}
 
-	var result model.ListResponse
 	groupings := make(map[string][]string)
 	for _, config := range state.jsonConfig {
 		title := fmt.Sprintf("%s - %s", config.Group, config.Env)
-		value := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
+		value := fmt.Sprintf("%s -> %s : %s", config.Tag, config.Server.Host, config.Server.Dir)
 		valSlice := groupings[title]
 		valSlice = append(valSlice, value)
 		groupings[title] = valSlice
@@ -172,21 +177,21 @@ func handleListRequest(server *ipc.Server, state *serverState) {
 
 	for k, v := range groupings {
 		el := model.ListResponseElement{Title: k, Content: v}
-		result = append(result, el)
+		message, err := el.Marshal()
+		if err != nil {
+			answer(server, ResError, []byte("Failed to serialize json content. This is likely an implementation error"))
+			return
+		}
+
+		answer(server, ResListEntries, []byte(message))
 	}
 
-	message, err := result.Marshal()
-	if err != nil {
-		server.Write(ResError, []byte("Failed to serialize json content. This is likely an implementation error"))
-		return
-	}
-
-	server.Write(ResListEntries, message)
+	answer(server, ResSuccess, []byte{})
 }
 
 func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 	if !state.isDecrypted {
-		server.Write(ResNeedDecryption, []byte("Need Decryption"))
+		answer(server, ResNeedDecryption, []byte("Need Decryption"))
 		return
 	}
 
@@ -198,10 +203,10 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 			response := model.MatchResponse{Connection: connectionString, Server: config.Server}
 			payload, err := response.Marshal()
 			if err != nil {
-				server.Write(ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
+				answer(server, ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
 				return
 			}
-			server.Write(ResClosestMatch, payload)
+			answer(server, ResClosestMatch, payload)
 			return
 		}
 	}
@@ -215,15 +220,15 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 			response := model.MatchResponse{Connection: connectionString, Server: config.Server}
 			payload, err := response.Marshal()
 			if err != nil {
-				server.Write(ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
+				answer(server, ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
 				return
 			}
-			server.Write(ResClosestMatch, payload)
+			answer(server, ResClosestMatch, payload)
 			return
 		}
 	}
 
-	server.Write(ResNoMatch, []byte{})
+	answer(server, ResNoMatch, []byte{})
 }
 
 func runSetup() *os.File {
@@ -243,4 +248,12 @@ func runSetup() *os.File {
 	log.SetOutput(f)
 	log.Println("Setup succeeded")
 	return f
+}
+
+func answer(server *ipc.Server, code int, message []byte) {
+	log.Println("Answering with " + msgCodeToString[uint16(code)])
+	err := server.Write(code, message)
+	if err != nil {
+		log.Fatal("Error: ", err.Error())
+	}
 }

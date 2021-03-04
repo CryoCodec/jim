@@ -13,11 +13,11 @@ import (
 )
 
 func CreateClient() *ipc.Client {
-	config := &ipc.ClientConfig{
-		Timeout:    2,
-		RetryTimer: 2,
-	}
-	cc, err := ipc.StartClient("jimssocket", config)
+	// config := &ipc.ClientConfig{
+	// 	Timeout:    2,
+	// 	RetryTimer: 2,
+	// }
+	cc, err := ipc.StartClient("jimssocket", nil)
 	if err != nil {
 		log.Fatal("Could not create ipc client. Reason:", err)
 	}
@@ -42,24 +42,32 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 	}
 }
 
-func ListEntries(client *ipc.Client, propagationChan chan Message) model.ListResponse {
+func ListEntries(client *ipc.Client, propagationChan chan Message) chan model.ListResponseElement {
+	out := make(chan model.ListResponseElement)
 	writetoServer(client, ReqListEntries, []byte{})
-	message := <-propagationChan
-	switch message.Code {
-	case ResListEntries:
-		result, err := model.UnmarshalListResponse(message.Payload)
-		if err != nil {
-			die(fmt.Sprintf("Failed to deserialize json response. This is likely an implementation bug. Reason: %s", err.Error()), client)
+	go func() {
+		for {
+			message := <-propagationChan
+			switch message.Code {
+			case ResListEntries:
+				result, err := model.UnmarshalListResponseElement(message.Payload)
+				if err != nil {
+					die(fmt.Sprintf("Failed to deserialize json response. This is likely an implementation bug. Reason: %s", err.Error()), client)
+				}
+				out <- result
+			case ResNeedDecryption:
+				die("Server was in wrong state. This is likely an implementation bug.", client)
+			case ResError:
+				die(fmt.Sprintf("Server error: %s", string(message.Payload)), client)
+			case ResSuccess:
+				close(out)
+				return
+			default:
+				die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
+			}
 		}
-		return result
-	case ResNeedDecryption:
-		die("Server was in wrong state. This is likely an implementation bug.", client)
-	case ResError:
-		die(fmt.Sprintf("Server error: %s", string(message.Payload)), client)
-	default:
-		die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
-	}
-	panic("reached unreachable code. ( Well wasn't so unreachable after all, hu? )")
+	}()
+	return out
 }
 
 func GetMatchingServer(query string, client *ipc.Client, propagationChan chan Message) model.MatchResponse {
@@ -130,8 +138,8 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 		writetoServer(client, ReqAttemptDecryption, bytePassword)
 		switch response := <-propagationChan; response.Code {
 		case ResDecryptionFailed:
-			log.Println("Decryption failed, remaining attempts ", attempt)
 			attempt--
+			log.Println("Decryption failed, remaining attempts ", attempt)
 			continue
 		case ResSuccess:
 			return

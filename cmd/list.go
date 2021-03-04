@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	jim "github.com/CryoCodec/jim/ipc"
+	"github.com/CryoCodec/jim/model"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +39,11 @@ var listCmd = &cobra.Command{
 		isReady := jim.IsServerStatusReady(client, propagationChan)
 
 		if isReady {
-			entries := jim.ListEntries(client, propagationChan)
+			var entries model.ListResponse
+			c := jim.ListEntries(client, propagationChan)
+			for el := range c {
+				entries = append(entries, el)
+			}
 			sort.Sort(entries)
 			for _, entry := range entries {
 				fmt.Println(entry.Title)

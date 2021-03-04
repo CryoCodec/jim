@@ -46,19 +46,19 @@ func (s *MatchResponse) Marshal() ([]byte, error) {
 
 type ListResponse []ListResponseElement
 
-func UnmarshalListResponse(data []byte) (ListResponse, error) {
-	var r ListResponse
+type ListResponseElement struct {
+	Title   string   `json:"title"`
+	Content []string `json:"content"`
+}
+
+func UnmarshalListResponseElement(data []byte) (ListResponseElement, error) {
+	var r ListResponseElement
 	err := json.Unmarshal(data, &r)
 	return r, err
 }
 
-func (r *ListResponse) Marshal() ([]byte, error) {
+func (r *ListResponseElement) Marshal() ([]byte, error) {
 	return json.Marshal(r)
-}
-
-type ListResponseElement struct {
-	Title   string   `json:"title"`
-	Content []string `json:"content"`
 }
 
 func (a ListResponse) Len() int           { return len(a) }
