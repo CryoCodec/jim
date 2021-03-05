@@ -234,13 +234,13 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 func runSetup() *os.File {
 	jimDir := files.GetJimConfigDir()
 	if _, err := os.Stat(jimDir); os.IsNotExist(err) {
-		err := os.Mkdir(jimDir, 0744)
+		err := os.Mkdir(jimDir, 0740)
 		if err != nil {
 			log.Fatal("Failed to create jim's config directory", jimDir)
 		}
 	}
 
-	f, err := os.OpenFile(filepath.Join(jimDir, "jim-server.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0744)
+	f, err := os.OpenFile(filepath.Join(jimDir, "jim-server.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0740)
 	if err != nil {
 		log.Fatalf("Failed to open jim's log file: %v", err)
 	}
