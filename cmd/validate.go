@@ -16,23 +16,40 @@ limitations under the License.
 package cmd
 
 import (
-	"fmt"
+	"io/ioutil"
+	"log"
 
+	"github.com/CryoCodec/jim/files"
+	"github.com/CryoCodec/jim/model"
 	"github.com/spf13/cobra"
 )
 
 // validateCmd represents the validate command
 var validateCmd = &cobra.Command{
-	Use:   "validate",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Use:   "validate /path/to/file",
+	Short: "Checks whether the given file can be parsed as jim config.",
+	Long: `Checks whether the given file can be parsed as jim config. 
+	The file must be available in plain text. This operation does not work on the encrypted config file.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("validate called")
+		if len(args) != 1 {
+			log.Fatal("Encrypt expects exactly 1 parameter")
+		}
+
+		if !files.Exists(args[0]) {
+			log.Fatal("The passed file does not exist or is a directory")
+		}
+
+		fileContents, err := ioutil.ReadFile(args[0])
+		if err != nil {
+			log.Fatal("Error reading file: ", err.Error())
+		}
+
+		_, err = model.UnmarshalJimConfig(fileContents)
+		if err != nil {
+			log.Fatal("The given file could not be read as jim config, reason: ", err.Error())
+		} else {
+			log.Fatal("Congrats, the config file is valid")
+		}
 	},
 }
 
