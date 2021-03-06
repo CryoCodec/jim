@@ -32,7 +32,7 @@ var validateCmd = &cobra.Command{
 	The file must be available in plain text. This operation does not work on the encrypted config file.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) != 1 {
-			log.Fatal("Encrypt expects exactly 1 parameter")
+			log.Fatal("validate expects exactly 1 parameter")
 		}
 
 		if !files.Exists(args[0]) {
