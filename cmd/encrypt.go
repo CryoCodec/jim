@@ -38,11 +38,8 @@ var encryptCmd = &cobra.Command{
 	Short: "Encrypts the file at given path, so it can be used with jim",
 	Long: `Encrypts the file at path/to/file with a master password. 
 	The file may then be used with jim`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) != 1 {
-			log.Fatal("Encrypt expects exactly 1 parameter")
-		}
-
 		if !files.Exists(args[0]) {
 			log.Fatal("The passed file does not exist or is a directory")
 		}

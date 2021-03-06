@@ -30,11 +30,8 @@ var validateCmd = &cobra.Command{
 	Short: "Checks whether the given file can be parsed as jim config.",
 	Long: `Checks whether the given file can be parsed as jim config. 
 	The file must be available in plain text. This operation does not work on the encrypted config file.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) != 1 {
-			log.Fatal("validate expects exactly 1 parameter")
-		}
-
 		if !files.Exists(args[0]) {
 			log.Fatal("The passed file does not exist or is a directory")
 		}

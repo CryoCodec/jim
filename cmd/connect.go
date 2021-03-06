@@ -32,6 +32,7 @@ var connectCmd = &cobra.Command{
 	Use:   "connect",
 	Short: "Opens an interactive SSH connection to the Server, whose tag matches the args the closest.",
 	Long:  `Opens an interactive SSH connection to the Server, whose tag matches the args the closest. Requires native SSH and SSHPASS available on PATH.`,
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		client := jim.CreateClient()
 		propagationChan := make(chan jim.Message)

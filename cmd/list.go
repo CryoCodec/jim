@@ -30,6 +30,7 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Lists all entries in the configuration file",
 	Long:  `Lists all entries in the configuration file`,
+	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		client := jim.CreateClient()
 		defer client.Close()

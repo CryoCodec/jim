@@ -38,11 +38,8 @@ var decryptCmd = &cobra.Command{
 	Use:   "decrypt path/to/file",
 	Short: "Decrypts the file at given path, so you may edit your configuration",
 	Long:  `Decrypts the file at given path, so you may edit your configuration. The file has to be encrypted by jim and must end with .enc`,
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) != 1 {
-			log.Fatal("Decrypt expects exactly 1 parameter")
-		}
-
 		if !files.Exists(args[0]) {
 			log.Fatal("The passed file does not exist or is a directory")
 		}

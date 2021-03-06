@@ -33,8 +33,9 @@ import (
 // doctorCmd represents the doctor command
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Performes a system check and gives hints on how to make jim operational.",
-	Long:  `Performes a system check and gives hints on how to make jim operational.`,
+	Short: "Performs a system check and gives hints on how to make jim operational.",
+	Long:  `Performs a system check and gives hints on how to make jim operational.`,
+	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("Checking if the config directory ~/.jim is available")
 		jimDir := files.GetJimConfigDir()
