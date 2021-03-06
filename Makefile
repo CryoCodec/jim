@@ -12,7 +12,7 @@ $(PLATFORMS):
 	GOOS=$(os) GOARCH=$(arch) go build -o 'build/$(os)-$(arch)/jimServer' bin/jimServer/main.go
 	cp static/* 'build/$(os)-$(arch)'
 	mkdir -p dist
-	cd build/$(os)-$(arch) && tar -zcvf ../../dist/jim-$(os)-$(arch).tar.gz .
+	cd build && tar -zcvf ../dist/jim-$(os)-$(arch).tar.gz $(os)-$(arch)
 
 .PHONY: build
 build: build-client build-server
