@@ -1,15 +1,17 @@
 #!/bin/bash
 
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
 if ! command -v "pgrep" > /dev/null
 then
     echo "It seems a necessary utility is missing, running doctor command"
-    ./jimClient doctor
+    "$DIR"/jimClient doctor
     exit
 fi
 
 if ! pgrep -x "jimServer" > /dev/null
 then
-    ./jimServer &
+    "$DIR"/jimServer &
 fi
 
-./jimClient "$@"
+"$DIR"/jimClient "$@"
