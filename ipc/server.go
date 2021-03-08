@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	b64 "encoding/base64"
 
@@ -21,7 +22,8 @@ import (
 )
 
 func CreateServer() *ipc.Server {
-	sc, err := ipc.StartServer("jimssocket", nil)
+	config := ipc.ServerConfig{Timeout: 4 * time.Second}
+	sc, err := ipc.StartServer("jimssocket", &config)
 	if err != nil {
 		log.Fatal("Could not start server, reason:", err)
 	}

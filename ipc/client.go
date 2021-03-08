@@ -13,11 +13,10 @@ import (
 )
 
 func CreateClient() *ipc.Client {
-	// config := &ipc.ClientConfig{
-	// 	Timeout:    2,
-	// 	RetryTimer: 2,
-	// }
-	cc, err := ipc.StartClient("jimssocket", nil)
+	config := &ipc.ClientConfig{
+		Timeout: 2,
+	}
+	cc, err := ipc.StartClient("jimssocket", config)
 	if err != nil {
 		log.Fatal("Could not create ipc client. Reason:", err)
 	}
