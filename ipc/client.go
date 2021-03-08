@@ -30,7 +30,7 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 		message := <-propagationChan
 		switch message.Code {
 		case ResRequireConfigFile:
-			loadConfigFile(client, propagationChan)
+			LoadConfigFile(client, propagationChan)
 		case ResNeedDecryption:
 			requestPWandDecrypt(client, propagationChan)
 		case ResReadyToServe:
@@ -150,13 +150,15 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 	}
 }
 
-func loadConfigFile(client *ipc.Client, propagationChan chan Message) {
+func LoadConfigFile(client *ipc.Client, propagationChan chan Message) {
 	path := files.GetJimConfigFilePath()
+	log.Printf("Trying to load config file from %s", path)
 	writetoServer(client, ReqLoadFile, []byte(path))
 	switch response := <-propagationChan; response.Code {
 	case ResError:
 		log.Fatal(fmt.Sprintf("Server failed to load config file, reason: %s", string(response.Payload)))
 	case ResSuccess:
+		log.Printf("---> Success")
 		return
 	default:
 		die(fmt.Sprintf("Received unexpected message %s, when loading config file", msgCodeToString[uint16(response.Code)]), client)
