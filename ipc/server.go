@@ -242,7 +242,7 @@ func runSetup() *os.File {
 		}
 	}
 
-	f, err := os.OpenFile(filepath.Join(jimDir, "jim-server.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0740)
+	f, err := os.OpenFile(filepath.Join(jimDir, "jim-server.log"), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0740)
 	if err != nil {
 		log.Fatalf("Failed to open jim's log file: %v", err)
 	}
