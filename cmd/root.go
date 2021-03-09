@@ -17,7 +17,7 @@ var cfgFile string
 var rootCmd = &cobra.Command{
 	Use:     "jim",
 	Short:   "A CLI for connecting to multiple SSH Servers",
-	Version: "1.0.0-alpha",
+	Version: "1.0.0-rc",
 	//	Run: func(cmd *cobra.Command, args []string) {
 }
 
