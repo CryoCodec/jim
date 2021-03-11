@@ -1,3 +1,4 @@
+// Package files offers some utility methods for checking file existence or finding jim's config data.
 package files
 
 import (
@@ -6,6 +7,8 @@ import (
 	"path/filepath"
 )
 
+// Exists checks whether a file with given filepath exists.
+// Returns true, if the file indeed exists, in all other cases false.
 func Exists(filename string) bool {
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -14,6 +17,9 @@ func Exists(filename string) bool {
 	return !info.IsDir()
 }
 
+// GetJimConfigFilePath returns the filepath to the encrypted jim config.
+// Highest priority has the env variable JIM_CONFIG_FILE.
+// If the variable is not set the default location  ~/.jim/config.json.enc is used.
 func GetJimConfigFilePath() string {
 	path := os.Getenv("JIM_CONFIG_FILE") // env variable has highest priority
 	if path == "" {                      // fallback to the standard location
@@ -35,6 +41,7 @@ or set the path to the config file via the environment variable JIM_CONFIG_FILE`
 	return path
 }
 
+// GetJimConfigDir returns the filepath to jim's config directory ~/.jim
 func GetJimConfigDir() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {

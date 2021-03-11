@@ -1,5 +1,6 @@
 package ipc
 
+// Denotes the message types uesd for server communication
 const (
 	ReqAttemptDecryption = iota + 1
 	ResDecryptionFailed
@@ -19,8 +20,10 @@ const (
 	ResError
 )
 
+// Code denotes the message's code, a simple int
 type Code int
 
+// Message is the type that resembles a domain specific message
 type Message struct {
 	Code    Code
 	Payload []byte

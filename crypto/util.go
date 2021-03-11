@@ -8,6 +8,9 @@ import (
 	"golang.org/x/crypto/scrypt"
 )
 
+// Encrypt encrypts a given plain text byte[] with a password.
+// It uses Scrypt as KDF.
+// For decryption use the Decrypt function.
 func Encrypt(password, data []byte) ([]byte, error) {
 	key, salt, err := deriveKey(password, nil)
 	if err != nil {
@@ -36,6 +39,8 @@ func Encrypt(password, data []byte) ([]byte, error) {
 	return ciphertext, nil
 }
 
+// Decrypt decrypts a given cipher text byte[], which was encrypted with the Encrypt function.
+// For encryption use the encryption function.
 func Decrypt(password, data []byte) ([]byte, error) {
 	salt, data := data[len(data)-32:], data[:len(data)-32]
 

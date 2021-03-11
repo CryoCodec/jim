@@ -21,6 +21,8 @@ import (
 	ipc "github.com/james-barrow/golang-ipc"
 )
 
+// CreateServer creates a server instance with the intended configuration for jim.
+// It does not yet react on message, call Listen to actually receive messages.
 func CreateServer() *ipc.Server {
 	config := ipc.ServerConfig{Timeout: 4 * time.Second}
 	sc, err := ipc.StartServer("jimssocket", &config)
@@ -30,6 +32,8 @@ func CreateServer() *ipc.Server {
 	return sc
 }
 
+// Listen runs a server loop, receiving and answering messages.
+// This loop never returns
 func Listen(server *ipc.Server) {
 	f := runSetup()
 

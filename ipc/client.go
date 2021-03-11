@@ -12,6 +12,8 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+// CreateClient creates an ipc client, which may be used to
+// write and receive data from a unix domain socket/named pipe
 func CreateClient() *ipc.Client {
 	config := &ipc.ClientConfig{
 		Timeout: 2,
@@ -24,6 +26,9 @@ func CreateClient() *ipc.Client {
 	return cc
 }
 
+// IsServerStatusReady ensures the server is in the correct state ready and decrypted.
+// If necessary this method will cause the server to load the config file and ask the user
+// to enter the master password for decryption.
 func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool {
 	for {
 		writetoServer(client, ReqStatus, []byte{})
@@ -41,6 +46,8 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 	}
 }
 
+// ListEntries asks the server for all entries in the config file and returns these.
+// The server has to be in ready state.
 func ListEntries(client *ipc.Client, propagationChan chan Message) chan model.ListResponseElement {
 	out := make(chan model.ListResponseElement)
 	writetoServer(client, ReqListEntries, []byte{})
@@ -69,6 +76,8 @@ func ListEntries(client *ipc.Client, propagationChan chan Message) chan model.Li
 	return out
 }
 
+// GetMatchingServer asks the server for a matching entry for the query string.
+// The server has to be in ready state.
 func GetMatchingServer(query string, client *ipc.Client, propagationChan chan Message) model.MatchResponse {
 	writetoServer(client, ReqClosestMatch, []byte(query))
 	message := <-propagationChan
@@ -89,6 +98,8 @@ func GetMatchingServer(query string, client *ipc.Client, propagationChan chan Me
 	panic("reached unreachable code. ( Well, wasn't so unreachable after all, hu? )")
 }
 
+// ReadMessage will read from the socket until forever. Domain specific messages are forwarded via the propagationChan.
+// Run this function in a Go routine.
 func ReadMessage(client *ipc.Client, propagationChan chan Message, verbose bool) {
 	errorCounter := 0
 	for {
@@ -150,6 +161,7 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 	}
 }
 
+// LoadConfigFile causes the server to load the config file.
 func LoadConfigFile(client *ipc.Client, propagationChan chan Message) {
 	path := files.GetJimConfigFilePath()
 	log.Printf("Trying to load config file from %s", path)
