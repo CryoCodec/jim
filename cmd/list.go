@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"sort"
 
 	jim "github.com/CryoCodec/jim/ipc"
@@ -21,25 +20,21 @@ var listCmd = &cobra.Command{
 		defer client.Close()
 		propagationChan := jim.StartReceiving(client, Verbose)
 
-		isReady := jim.IsServerStatusReady(client, propagationChan)
+		ensureServerStatusIsReady(client, propagationChan)
 
-		if isReady {
-			var entries model.ListResponse
-			c := jim.ListEntries(client, propagationChan)
-			for el := range c {
-				entries = append(entries, el)
+		var entries model.ListResponse
+		c := jim.ListEntries(client, propagationChan)
+		for el := range c {
+			entries = append(entries, el)
+		}
+		sort.Sort(entries)
+		for _, entry := range entries {
+			fmt.Println(entry.Title)
+			sort.Strings(entry.Content)
+			for _, val := range entry.Content {
+				fmt.Println(val)
 			}
-			sort.Sort(entries)
-			for _, entry := range entries {
-				fmt.Println(entry.Title)
-				sort.Strings(entry.Content)
-				for _, val := range entry.Content {
-					fmt.Println(val)
-				}
-				fmt.Println()
-			}
-		} else {
-			log.Fatal("Server is not ready, this is likely an implementation error.")
+			fmt.Println()
 		}
 	},
 }

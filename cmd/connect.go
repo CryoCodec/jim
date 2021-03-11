@@ -22,19 +22,14 @@ var connectCmd = &cobra.Command{
 		client := jim.CreateClient()
 		propagationChan := jim.StartReceiving(client, Verbose)
 
-		isReady := jim.IsServerStatusReady(client, propagationChan)
+		ensureServerStatusIsReady(client, propagationChan)
 
-		if isReady {
-			response := jim.GetMatchingServer(strings.Join(args, " "), client, propagationChan)
-			client.Close()
-			log.Println("Connection: ", response.Connection)
-			err := connectToServer(&response.Server)
-			if err != nil {
-				log.Fatal("Error: ", err.Error())
-			}
-
-		} else {
-			log.Fatal("Server is not ready, this is likely an implementation error.")
+		response := jim.GetMatchingServer(strings.Join(args, " "), client, propagationChan)
+		client.Close()
+		log.Println("Connection: ", response.Connection)
+		err := connectToServer(&response.Server)
+		if err != nil {
+			log.Fatal("Error: ", err.Error())
 		}
 	},
 }
