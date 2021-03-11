@@ -14,8 +14,7 @@ var reloadCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		client := jim.CreateClient()
 		defer client.Close()
-		propagationChan := make(chan jim.Message)
-		go jim.ReadMessage(client, propagationChan, Verbose)
+		propagationChan := jim.StartReceiving(client, Verbose)
 		jim.LoadConfigFile(client, propagationChan)
 	},
 }

@@ -98,38 +98,43 @@ func GetMatchingServer(query string, client *ipc.Client, propagationChan chan Me
 	panic("reached unreachable code. ( Well, wasn't so unreachable after all, hu? )")
 }
 
-// ReadMessage will read from the socket until forever. Domain specific messages are forwarded via the propagationChan.
-// Run this function in a Go routine.
-func ReadMessage(client *ipc.Client, propagationChan chan Message, verbose bool) {
-	errorCounter := 0
-	for {
-		m, err := client.Read()
+// StartReceiving will read from the socket in go routine until forever. Domain specific messages are forwarded via the returned channel.
+func StartReceiving(client *ipc.Client, verbose bool) chan Message {
+	propagationChan := make(chan Message)
 
-		if err != nil {
-			if !(err.Error() == "Client has closed the connection") { // this message will always be sent, once we close the client intentionally
-				die(fmt.Sprintf("IPC Communication breakdown. Reason: %s ", err.Error()), client)
+	go func() {
+		errorCounter := 0
+		for {
+			m, err := client.Read()
+
+			if err != nil {
+				if !(err.Error() == "Client has closed the connection") { // this message will always be sent, once we close the client intentionally
+					die(fmt.Sprintf("IPC Communication breakdown. Reason: %s ", err.Error()), client)
+				}
+				return
 			}
-			return
+			switch m.MsgType {
+			case -1: // message type -1 is status change and only used internally
+				if verbose {
+					log.Println("Status update: " + m.Status)
+				}
+			case -2: // message type -2 is an error, these won't automatically cause the recieve channel to close.
+				log.Println("Error: " + err.Error())
+				errorCounter++
+				if errorCounter > 10 {
+					die("Exhausted retry budget, application will exit. Please try again.", client)
+				}
+				time.Sleep(200 * time.Millisecond)
+			default:
+				if verbose {
+					log.Println("Client received message: " + msgCodeToString[uint16(m.MsgType)])
+				}
+				propagationChan <- Message{Code(m.MsgType), m.Data}
+			}
 		}
-		switch m.MsgType {
-		case -1: // message type -1 is status change and only used internally
-			if verbose {
-				log.Println("Status update: " + m.Status)
-			}
-		case -2: // message type -2 is an error, these won't automatically cause the recieve channel to close.
-			log.Println("Error: " + err.Error())
-			errorCounter++
-			if errorCounter > 10 {
-				die("Exhausted retry budget, application will exit. Please try again.", client)
-			}
-			time.Sleep(200 * time.Millisecond)
-		default:
-			if verbose {
-				log.Println("Client received message: " + msgCodeToString[uint16(m.MsgType)])
-			}
-			propagationChan <- Message{Code(m.MsgType), m.Data}
-		}
-	}
+	}()
+
+	return propagationChan
 }
 
 func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
