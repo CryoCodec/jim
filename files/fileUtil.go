@@ -2,6 +2,7 @@
 package files
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -20,25 +21,21 @@ func Exists(filename string) bool {
 // GetJimConfigFilePath returns the filepath to the encrypted jim config.
 // Highest priority has the env variable JIM_CONFIG_FILE.
 // If the variable is not set the default location  ~/.jim/config.json.enc is used.
-func GetJimConfigFilePath() string {
+func GetJimConfigFilePath() (string, error) {
 	path := os.Getenv("JIM_CONFIG_FILE") // env variable has highest priority
 	if path == "" {                      // fallback to the standard location
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			log.Fatal("Could not read user home directory path")
-		}
-		path = filepath.Join(homeDir, ".jim", "config.json.enc")
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			log.Fatal(
-				`No encrypted config file was found at the expected path ~/.jim/config.json.enc. 
+		path = filepath.Join(GetJimConfigDir(), "config.json.enc")
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return "", fmt.Errorf(
+			`No encrypted config file was found at the configured path '%s'. 
 Either proceed with 
 jim doctor
 jim encrypt
 
-or set the path to the config file via the environment variable JIM_CONFIG_FILE`)
-		}
+or set the path to the config file via the environment variable JIM_CONFIG_FILE`, path)
 	}
-	return path
+	return path, nil
 }
 
 // GetJimConfigDir returns the filepath to jim's config directory ~/.jim

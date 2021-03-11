@@ -163,7 +163,10 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 
 // LoadConfigFile causes the server to load the config file.
 func LoadConfigFile(client *ipc.Client, propagationChan chan Message) {
-	path := files.GetJimConfigFilePath()
+	path, err := files.GetJimConfigFilePath()
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 	log.Printf("Trying to load config file from %s", path)
 	writetoServer(client, ReqLoadFile, []byte(path))
 	switch response := <-propagationChan; response.Code {

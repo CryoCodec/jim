@@ -76,6 +76,9 @@ var doctorCmd = &cobra.Command{
 			}
 		} else {
 			log.Println(fmt.Sprintf("Environment variable JIM_CONFIG_FILE is set, using the path %s", path))
+			if !files.Exists(path) {
+				log.Println("The configured path does not point to an existing file. Please update the environment variable JIM_CONFIG_FILE.")
+			}
 		}
 
 		commandExists("pgrep")
