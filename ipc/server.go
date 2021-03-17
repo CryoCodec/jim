@@ -45,43 +45,35 @@ func Listen(server *ipc.Server) {
 		os.Exit(1)
 	}()
 
+	resetC, firedC := startTimer()
+	readC := readLoop(server)
+
 	state := serverState{isDecrypted: false, encryptedFileContents: nil}
 
 	for {
-		m, err := server.Read()
-
-		if err == nil {
+		select {
+		case <-firedC:
+			state.isDecrypted = false
+			state.jsonConfig = nil
+		case m := <-readC:
+			log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 			switch m.MsgType {
-			case -1: // status updates
-				log.Println(fmt.Sprintf("State update: %s", server.Status()))
-			case -2: // internal error
-				log.Println("Error: " + err.Error())
 			case ReqLoadFile:
-				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleLoadFile(server, &state, m.Data)
 			case ReqStatus:
-				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleStatusRequest(server, &state)
 			case ReqAttemptDecryption:
-				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleDecryption(server, &state, m.Data)
 			case ReqListEntries:
-				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleListRequest(server, &state)
+				resetC <- true
 			case ReqClosestMatch:
-				log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
 				handleClosestMatch(server, &state, string(m.Data))
+				resetC <- true
 			default:
 				log.Println("Received unexpected message of type " + msgCodeToString[uint16(m.MsgType)] + ": " + string(m.Data))
 				answer(server, ResError, []byte(fmt.Sprintf("Received unexpected message of type %s", msgCodeToString[uint16(m.MsgType)])))
 			}
-
-		} else {
-			// error case, something went terribly wrong
-			// try to give a reason, however this message will probably not be received
-			server.Write(ResError, []byte(err.Error()))
-			f.Close()
-			log.Fatal("Fatal error:", err.Error())
 		}
 	}
 }
@@ -91,6 +83,32 @@ type serverState struct {
 	encryptedFileContents []byte
 	jsonConfig            model.JimConfig
 	matcher               *closestmatch.ClosestMatch
+}
+
+func readLoop(server *ipc.Server) chan *ipc.Message {
+	out := make(chan *ipc.Message)
+	go func() {
+		for {
+			m, err := server.Read()
+
+			if err == nil {
+				switch m.MsgType {
+				case -1: // status updates
+					log.Println(fmt.Sprintf("State update: %s", server.Status()))
+				case -2: // internal error
+					log.Println("Error: " + err.Error())
+				default:
+					out <- m
+				}
+			} else {
+				// error case, something went terribly wrong
+				// try to give a reason, however this message will probably not be received
+				server.Write(ResError, []byte(err.Error()))
+				log.Fatal("Fatal error:", err.Error())
+			}
+		}
+	}()
+	return out
 }
 
 func handleStatusRequest(server *ipc.Server, state *serverState) {
@@ -262,4 +280,26 @@ func answer(server *ipc.Server, code int, message []byte) {
 	if err != nil {
 		log.Fatal("Error: ", err.Error())
 	}
+}
+
+func startTimer() (chan bool, chan bool) {
+	reset := make(chan bool, 1)
+	out := make(chan bool, 1)
+	duration := 90 * time.Minute
+	timer := time.NewTimer(duration)
+
+	go func() {
+		for {
+			select {
+			case <-reset:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(duration) // this assumes, the timer's channel will be reused
+			case <-timer.C:
+				out <- true // timer fired, require state update
+			}
+		}
+	}()
+	return reset, out
 }
