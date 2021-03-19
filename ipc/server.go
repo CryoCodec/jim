@@ -67,10 +67,10 @@ func Listen(server *ipc.Server) {
 				handleDecryption(server, &state, m.Data)
 			case ReqListEntries:
 				handleListRequest(server, &state)
-				resetC <- true
+				go func() { resetC <- true }()
 			case ReqClosestMatch:
 				handleClosestMatch(server, &state, string(m.Data))
-				resetC <- true
+				go func() { resetC <- true }()
 			case ReqClosestN:
 				handleClosest10(server, &state, string(m.Data))
 			default:
