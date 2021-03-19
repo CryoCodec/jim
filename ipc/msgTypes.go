@@ -12,6 +12,8 @@ const (
 	ReqClosestMatch
 	ResClosestMatch
 	ResNoMatch
+	ReqClosestN
+	ResClosestN
 	ReqCloseConnection
 	ReqStatus
 	ResReadyToServe

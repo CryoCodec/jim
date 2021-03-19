@@ -12,6 +12,7 @@ import (
 	"time"
 
 	b64 "encoding/base64"
+	"encoding/json"
 
 	"github.com/CryoCodec/jim/crypto"
 	"github.com/CryoCodec/jim/files"
@@ -70,6 +71,8 @@ func Listen(server *ipc.Server) {
 			case ReqClosestMatch:
 				handleClosestMatch(server, &state, string(m.Data))
 				resetC <- true
+			case ReqClosestN:
+				handleClosest10(server, &state, string(m.Data))
 			default:
 				log.Println("Received unexpected message of type " + msgCodeToString[uint16(m.MsgType)] + ": " + string(m.Data))
 				answer(server, ResError, []byte(fmt.Sprintf("Received unexpected message of type %s", msgCodeToString[uint16(m.MsgType)])))
@@ -94,7 +97,7 @@ func readLoop(server *ipc.Server) chan *ipc.Message {
 			if err == nil {
 				switch m.MsgType {
 				case -1: // status updates
-					log.Println(fmt.Sprintf("State update: %s", server.Status()))
+					log.Printf("State update: %s", server.Status())
 				case -2: // internal error
 					log.Println("Error: " + err.Error())
 				default:
@@ -253,6 +256,22 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 	}
 
 	answer(server, ResNoMatch, []byte{})
+}
+
+func handleClosest10(server *ipc.Server, state *serverState, query string) {
+	if !state.isDecrypted {
+		answer(server, ResNeedDecryption, []byte("Need Decryption"))
+		return
+	}
+
+	match := state.matcher.ClosestN(strings.ToLower(query), 10)
+	bytes, err := json.Marshal(match)
+	if err != nil {
+		answer(server, ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
+		return
+	}
+
+	answer(server, ResClosestN, bytes)
 }
 
 func runSetup() *os.File {

@@ -1,6 +1,7 @@
 package ipc
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"syscall"
@@ -26,10 +27,10 @@ func CreateClient() *ipc.Client {
 	return cc
 }
 
-// IsServerStatusReady ensures the server is in the correct state ready and decrypted.
+// MakeServerReady ensures the server is in the correct state ready and decrypted.
 // If necessary this method will cause the server to load the config file and ask the user
 // to enter the master password for decryption.
-func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool {
+func MakeServerReady(client *ipc.Client, propagationChan chan Message) bool {
 	for {
 		writetoServer(client, ReqStatus, []byte{})
 		message := <-propagationChan
@@ -42,6 +43,39 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 			return true
 		default:
 			die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
+		}
+	}
+}
+
+// IsServerStatusReady checks whether the server is ready to serve
+func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool {
+	for {
+		writetoServer(client, ReqStatus, []byte{})
+		message := <-propagationChan
+		switch message.Code {
+		case ResReadyToServe:
+			return true
+		default:
+			return false
+		}
+	}
+}
+
+// MatchClosestN gets a list of potentially matching entries in the config file
+func MatchClosestN(client *ipc.Client, propagationChan chan Message, query string) []string {
+	for {
+		writetoServer(client, ReqClosestN, []byte(query))
+		message := <-propagationChan
+		switch message.Code {
+		case ResClosestN:
+			var arr []string
+			err := json.Unmarshal(message.Payload, &arr)
+			if err != nil {
+				return []string{}
+			}
+			return arr
+		default: // since this is only used for shell completions, we return an empty array in all other cases.
+			return []string{}
 		}
 	}
 }

@@ -51,5 +51,14 @@ make build
 ```
 It is not necessary to build in the GOPATH. The build is tested on the latest GO v1.16.
 
+## Shell Completions
+
+jim offers shell completions for the connect command, showing valid candidates to connect to. To enable the shell completions execute
+
+```bash
+jim completion --help
+```
+ and follow the instructions. For better completion results when using tags with multiple spaces wrap the args in "", e.g. "Integration Webserver 1".
+
 ## Contribute
 You miss a feature or found a bug? File an issue or open a Pull Request. 

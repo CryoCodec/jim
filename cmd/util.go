@@ -12,7 +12,7 @@ import (
 // - if the server is not ready, it will try to load the config file and decrypt it
 // - if the server cannot reach the ready state, this function will bail out.
 func ensureServerStatusIsReady(client *ipc.Client, propagationChan chan jim.Message) {
-	if !jim.IsServerStatusReady(client, propagationChan) {
+	if !jim.MakeServerReady(client, propagationChan) {
 		log.Fatal("Server is not ready. Unless you've seen other error messages on the screen, this is likely an implementation error.")
 	}
 }
