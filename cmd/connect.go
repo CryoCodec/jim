@@ -75,13 +75,11 @@ func init() {
 }
 
 func connectToServer(server *model.Server, sshFlags []string) error {
-	sshArgs := []string{
-		"-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username + "@" + server.Host, "cd " + server.Dir + "; " + "bash",
-	}
-
-	sshArgs = append(sshFlags, sshArgs...)
 
 	if len(server.Password) == 0 {
+		sshArgs := []string{"-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username + "@" + server.Host, "cd " + server.Dir + "; " + "bash"}
+		sshArgs = append(sshFlags, sshArgs...)
+
 		cmd := exec.Command("ssh", sshArgs...)
 		return interactiveConsole(cmd)
 	}
