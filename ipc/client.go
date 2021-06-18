@@ -3,19 +3,24 @@ package ipc
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/CryoCodec/jim/core/domain"
 	"log"
 	"syscall"
 	"time"
 
 	"github.com/CryoCodec/jim/files"
-	"github.com/CryoCodec/jim/model"
 	ipc "github.com/james-barrow/golang-ipc"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-// CreateClient creates an ipc client, which may be used to
+type IpcClient struct {
+	cc              *ipc.Client
+	propagationChan chan Message
+}
+
+// InitializeClient creates an ipc client, which may be used to
 // write and receive data from a unix domain socket/named pipe
-func CreateClient() *ipc.Client {
+func InitializeClient(logVerbose bool) IpcClient {
 	config := &ipc.ClientConfig{
 		Timeout: 2,
 	}
@@ -23,35 +28,39 @@ func CreateClient() *ipc.Client {
 	if err != nil {
 		log.Fatal("Could not create ipc client. Reason:", err)
 	}
+	msgChannel := startReceiving(cc, logVerbose)
+	return IpcClient{cc, msgChannel}
+}
 
-	return cc
+func (ipcClient *IpcClient) Close() {
+	ipcClient.cc.Close()
 }
 
 // MakeServerReady ensures the server is in the correct state ready and decrypted.
 // If necessary this method will cause the server to load the config file and ask the user
 // to enter the master password for decryption.
-func MakeServerReady(client *ipc.Client, propagationChan chan Message) bool {
+func (ipcClient *IpcClient) MakeServerReady() bool {
 	for {
-		writetoServer(client, ReqStatus, []byte{})
-		message := <-propagationChan
+		ipcClient.writetoServer(ReqStatus, []byte{})
+		message := <-ipcClient.propagationChan
 		switch message.Code {
 		case ResRequireConfigFile:
-			LoadConfigFile(client, propagationChan)
+			ipcClient.LoadConfigFile()
 		case ResNeedDecryption:
-			requestPWandDecrypt(client, propagationChan)
+			ipcClient.requestPWandDecrypt()
 		case ResReadyToServe:
 			return true
 		default:
-			die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
+			die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), ipcClient.cc)
 		}
 	}
 }
 
-// IsServerStatusReady checks whether the server is ready to serve
-func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool {
+// IsServerReady checks whether the server is ready to serve
+func (ipcClient *IpcClient) IsServerReady() bool {
 	for {
-		writetoServer(client, ReqStatus, []byte{})
-		message := <-propagationChan
+		ipcClient.writetoServer(ReqStatus, []byte{})
+		message := <-ipcClient.propagationChan
 		switch message.Code {
 		case ResReadyToServe:
 			return true
@@ -62,10 +71,10 @@ func IsServerStatusReady(client *ipc.Client, propagationChan chan Message) bool 
 }
 
 // MatchClosestN gets a list of potentially matching entries in the config file
-func MatchClosestN(client *ipc.Client, propagationChan chan Message, query string) []string {
+func (ipcClient *IpcClient) MatchClosestN(query string) []string {
 	for {
-		writetoServer(client, ReqClosestN, []byte(query))
-		message := <-propagationChan
+		ipcClient.writetoServer(ReqClosestN, []byte(query))
+		message := <-ipcClient.propagationChan
 		switch message.Code {
 		case ResClosestN:
 			var arr []string
@@ -82,28 +91,28 @@ func MatchClosestN(client *ipc.Client, propagationChan chan Message, query strin
 
 // ListEntries asks the server for all entries in the config file and returns these.
 // The server has to be in ready state.
-func ListEntries(client *ipc.Client, propagationChan chan Message) chan model.ListResponseElement {
-	out := make(chan model.ListResponseElement)
-	writetoServer(client, ReqListEntries, []byte{})
+func (ipcClient *IpcClient) ListEntries() chan domain.ListResponseElement {
+	out := make(chan domain.ListResponseElement)
+	ipcClient.writetoServer(ReqListEntries, []byte{})
 	go func() {
 		for {
-			message := <-propagationChan
+			message := <-ipcClient.propagationChan
 			switch message.Code {
 			case ResListEntries:
-				result, err := model.UnmarshalListResponseElement(message.Payload)
+				result, err := domain.UnmarshalListResponseElement(message.Payload)
 				if err != nil {
-					die(fmt.Sprintf("Failed to deserialize json response. This is likely an implementation bug. Reason: %s", err.Error()), client)
+					die(fmt.Sprintf("Failed to deserialize json response. This is likely an implementation bug. Reason: %s", err.Error()), ipcClient.cc)
 				}
 				out <- result
 			case ResNeedDecryption:
-				die("Server was in wrong state. This is likely an implementation bug.", client)
+				die("Server was in wrong state. This is likely an implementation bug.", ipcClient.cc)
 			case ResError:
-				die(fmt.Sprintf("Server error: %s", string(message.Payload)), client)
+				die(fmt.Sprintf("Server error: %s", string(message.Payload)), ipcClient.cc)
 			case ResSuccess:
 				close(out)
 				return
 			default:
-				die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
+				die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), ipcClient.cc)
 			}
 		}
 	}()
@@ -112,28 +121,28 @@ func ListEntries(client *ipc.Client, propagationChan chan Message) chan model.Li
 
 // GetMatchingServer asks the server for a matching entry for the query string.
 // The server has to be in ready state.
-func GetMatchingServer(query string, client *ipc.Client, propagationChan chan Message) model.MatchResponse {
-	writetoServer(client, ReqClosestMatch, []byte(query))
-	message := <-propagationChan
+func (ipcClient *IpcClient) GetMatchingServer(query string) domain.MatchResponse {
+	ipcClient.writetoServer(ReqClosestMatch, []byte(query))
+	message := <-ipcClient.propagationChan
 	switch message.Code {
 	case ResClosestMatch:
-		result, err := model.UnmarshalMatchResponse(message.Payload)
+		result, err := domain.UnmarshalMatchResponse(message.Payload)
 		if err != nil {
-			die(fmt.Sprintf("Failed to deserialize json response. This is likely an implementation bug. Reason: %s", err.Error()), client)
+			die(fmt.Sprintf("Failed to deserialize json response. This is likely an implementation bug. Reason: %s", err.Error()), ipcClient.cc)
 		}
 		return result
 	case ResNoMatch:
-		die("No Server matched your query.", client)
+		die("No Server matched your query.", ipcClient.cc)
 	case ResError:
-		die(fmt.Sprintf("Server error: %s", string(message.Payload)), client)
+		die(fmt.Sprintf("Server error: %s", string(message.Payload)), ipcClient.cc)
 	default:
-		die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), client)
+		die(fmt.Sprintf("Received unexpected message %s, when requesting entries.", msgCodeToString[uint16(message.Code)]), ipcClient.cc)
 	}
 	panic("reached unreachable code. ( Well, wasn't so unreachable after all, hu? )")
 }
 
-// StartReceiving will read from the socket in go routine until forever. Domain specific messages are forwarded via the returned channel.
-func StartReceiving(client *ipc.Client, verbose bool) chan Message {
+// startReceiving will read from the socket in go routine until forever. Domain specific messages are forwarded via the returned channel.
+func startReceiving(client *ipc.Client, verbose bool) chan Message {
 	propagationChan := make(chan Message)
 
 	go func() {
@@ -171,11 +180,11 @@ func StartReceiving(client *ipc.Client, verbose bool) chan Message {
 	return propagationChan
 }
 
-func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
+func (ipcClient *IpcClient) requestPWandDecrypt() {
 	attempt := 3
 	for {
 		if attempt == 0 {
-			die("No more attempts left, exiting.", client)
+			die("No more attempts left, exiting.", ipcClient.cc)
 		}
 		log.Println("Enter master password:")
 		bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
@@ -184,8 +193,8 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 			attempt--
 			continue
 		}
-		writetoServer(client, ReqAttemptDecryption, bytePassword)
-		switch response := <-propagationChan; response.Code {
+		ipcClient.writetoServer(ReqAttemptDecryption, bytePassword)
+		switch response := <-ipcClient.propagationChan; response.Code {
 		case ResDecryptionFailed:
 			attempt--
 			log.Println("Decryption failed, remaining attempts ", attempt)
@@ -193,34 +202,35 @@ func requestPWandDecrypt(client *ipc.Client, propagationChan chan Message) {
 		case ResSuccess:
 			return
 		case ResJsonDeserializationFailed:
-			die(fmt.Sprintf("Config file is corrupted. Could not unmarshal json. Please correct your config file. Error: %s", string(response.Payload)), client)
+			die(fmt.Sprintf("Config file is corrupted. Could not unmarshal json. Please correct your config file. Error: %s", string(response.Payload)), ipcClient.cc)
 		default:
-			die(fmt.Sprintf("Received unexpected message %s, when attempting decryption. Error: %s", msgCodeToString[uint16(response.Code)], string(response.Payload)), client)
+			die(fmt.Sprintf("Received unexpected message %s, when attempting decryption. Error: %s", msgCodeToString[uint16(response.Code)], string(response.Payload)), ipcClient.cc)
 		}
 	}
 }
 
 // LoadConfigFile causes the server to load the config file.
-func LoadConfigFile(client *ipc.Client, propagationChan chan Message) {
+func (ipcClient *IpcClient) LoadConfigFile() {
 	path, err := files.GetJimConfigFilePath()
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 	log.Printf("Trying to load config file from %s", path)
-	writetoServer(client, ReqLoadFile, []byte(path))
-	switch response := <-propagationChan; response.Code {
+	ipcClient.writetoServer(ReqLoadFile, []byte(path))
+	switch response := <-ipcClient.propagationChan; response.Code {
 	case ResError:
 		log.Fatal(fmt.Sprintf("Server failed to load config file, reason: %s", string(response.Payload)))
 	case ResSuccess:
 		log.Printf("---> Success")
 		return
 	default:
-		die(fmt.Sprintf("Received unexpected message %s, when loading config file", msgCodeToString[uint16(response.Code)]), client)
+		die(fmt.Sprintf("Received unexpected message %s, when loading config file", msgCodeToString[uint16(response.Code)]), ipcClient.cc)
 	}
 }
 
-func writetoServer(client *ipc.Client, msgType int, message []byte) {
+func (ipcClient *IpcClient) writetoServer(msgType int, message []byte) {
 	// sleep until we're connected. ReadMessage will exit the application on timeout, so this is correct.
+	client := ipcClient.cc
 	for {
 		if client.Status() != "Connected" {
 			time.Sleep(200 * time.Millisecond)

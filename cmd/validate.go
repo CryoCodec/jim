@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	"github.com/CryoCodec/jim/core/domain"
 	"io/ioutil"
 	"log"
 
 	"github.com/CryoCodec/jim/files"
-	"github.com/CryoCodec/jim/model"
 	"github.com/spf13/cobra"
 )
 
@@ -26,7 +26,7 @@ var validateCmd = &cobra.Command{
 			log.Fatal("Error reading file: ", err.Error())
 		}
 
-		_, err = model.UnmarshalJimConfig(fileContents)
+		_, err = domain.UnmarshalJimConfig(fileContents)
 		if err != nil {
 			log.Fatal("The given file could not be read as jim config, reason: ", err.Error())
 		} else {

@@ -2,6 +2,7 @@ package ipc
 
 import (
 	"fmt"
+	"github.com/CryoCodec/jim/core/domain"
 	"io/ioutil"
 	"log"
 	"os"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/CryoCodec/jim/crypto"
 	"github.com/CryoCodec/jim/files"
-	"github.com/CryoCodec/jim/model"
 	"github.com/schollz/closestmatch"
 
 	ipc "github.com/james-barrow/golang-ipc"
@@ -84,7 +84,7 @@ func Listen(server *ipc.Server) {
 type serverState struct {
 	isDecrypted           bool
 	encryptedFileContents []byte
-	jsonConfig            model.JimConfig
+	jsonConfig            domain.JimConfig
 	matcher               *closestmatch.ClosestMatch
 }
 
@@ -150,7 +150,7 @@ func handleDecryption(server *ipc.Server, state *serverState, passphrase []byte)
 		return
 	}
 
-	parsed, err := model.UnmarshalJimConfig(clearText)
+	parsed, err := domain.UnmarshalJimConfig(clearText)
 	if err != nil {
 		answer(server, ResJsonDeserializationFailed, []byte(fmt.Sprintf("Failed to unmarshal json config. Reason: %s", err.Error())))
 		return
@@ -203,7 +203,7 @@ func handleListRequest(server *ipc.Server, state *serverState) {
 	}
 
 	for k, v := range groupings {
-		el := model.ListResponseElement{Title: k, Content: v}
+		el := domain.ListResponseElement{Title: k, Content: v}
 		message, err := el.Marshal()
 		if err != nil {
 			answer(server, ResError, []byte("Failed to serialize json content. This is likely an implementation error"))
@@ -227,7 +227,7 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 	for _, config := range state.jsonConfig {
 		if config.Tag == query {
 			connectionString := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
-			response := model.MatchResponse{Connection: connectionString, Server: config.Server}
+			response := domain.MatchResponse{Connection: connectionString, Server: config.Server}
 			payload, err := response.Marshal()
 			if err != nil {
 				answer(server, ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
@@ -244,7 +244,7 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 	for _, config := range state.jsonConfig {
 		if config.Tag == match {
 			connectionString := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
-			response := model.MatchResponse{Connection: connectionString, Server: config.Server}
+			response := domain.MatchResponse{Connection: connectionString, Server: config.Server}
 			payload, err := response.Marshal()
 			if err != nil {
 				answer(server, ResError, []byte("Failed to deserialize json. This is likely an implementation error"))

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bufio"
 	"fmt"
+	"github.com/CryoCodec/jim/core/domain"
 	"io/ioutil"
 	"log"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/CryoCodec/jim/files"
-	"github.com/CryoCodec/jim/model"
 	"github.com/spf13/cobra"
 )
 
@@ -44,11 +44,11 @@ var doctorCmd = &cobra.Command{
 			if !files.Exists(configFile) {
 				log.Println("The config file does not exist. I will create the dummy file config.json for you. Please update the file and use 'jim encrypt' afterwards.")
 				dummyFilePath := filepath.Join(jimDir, "config.json")
-				dummyValue := model.JimConfigElement{
+				dummyValue := domain.JimConfigElement{
 					Group: "This is just used for display purposes",
 					Env:   "This is just used for display purposes",
 					Tag:   "This string is used in the connect command",
-					Server: model.Server{
+					Server: domain.Server{
 						Host:     "Host name of your Server to connect to",
 						Port:     "The SSH Port on the remote server",
 						Dir:      "The directory you'd like to start after SSH login",
@@ -56,7 +56,7 @@ var doctorCmd = &cobra.Command{
 						Password: "The Password used for authentication",
 					},
 				}
-				jimConfig := model.JimConfig([]model.JimConfigElement{dummyValue})
+				jimConfig := domain.JimConfig([]domain.JimConfigElement{dummyValue})
 				json, err := jimConfig.Marshal()
 				if err != nil {
 					log.Fatal("Failed to deserialize json. This is an implementation bug!")

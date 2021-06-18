@@ -2,10 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/CryoCodec/jim/core/domain"
+	"log"
 	"sort"
 
 	jim "github.com/CryoCodec/jim/ipc"
-	"github.com/CryoCodec/jim/model"
 	"github.com/spf13/cobra"
 )
 
@@ -16,14 +17,15 @@ var listCmd = &cobra.Command{
 	Long:  `Lists all entries in the configuration file`,
 	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		client := jim.CreateClient()
-		defer client.Close()
-		propagationChan := jim.StartReceiving(client, Verbose)
+		ipcPort := jim.InitializeClient(Verbose)
+		defer ipcPort.Close()
 
-		ensureServerStatusIsReady(client, propagationChan)
+		if !ipcPort.MakeServerReady() {
+			log.Fatal("Server is not ready. Unless you've seen other error messages on the screen, this is likely an implementation error.")
+		}
 
-		var entries model.ListResponse
-		c := jim.ListEntries(client, propagationChan)
+		var entries domain.ListResponse
+		c := ipcPort.ListEntries()
 		for el := range c {
 			entries = append(entries, el)
 		}

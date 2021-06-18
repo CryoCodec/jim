@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/CryoCodec/jim/core/domain"
 	"log"
 	"os"
 	"os/exec"
@@ -10,10 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	jim "github.com/CryoCodec/jim/ipc"
-	"github.com/CryoCodec/jim/model"
 )
-
-const VerboseFlag = "-v"
 
 // connectCmd represents the connect command
 var connectCmd = &cobra.Command{
@@ -26,13 +24,12 @@ var connectCmd = &cobra.Command{
 		if len(args) != 0 {
 			toComplete = fmt.Sprintf("%s %s", strings.Join(args, " "), lastParam)
 		}
-		client := jim.CreateClient()
-		defer client.Close()
-		propagationChan := jim.StartReceiving(client, Verbose)
+		ipcPort := jim.InitializeClient(Verbose)
+		defer ipcPort.Close()
 
-		if jim.IsServerStatusReady(client, propagationChan) {
+		if ipcPort.IsServerReady() {
 			cobra.CompDebug(fmt.Sprintf("server is open, trying closestN with %s", toComplete), true)
-			arr := jim.MatchClosestN(client, propagationChan, toComplete)
+			arr := ipcPort.MatchClosestN(toComplete)
 			cobra.CompDebug(fmt.Sprintf("Got %v", arr), true)
 			return arr, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -40,13 +37,14 @@ var connectCmd = &cobra.Command{
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		client := jim.CreateClient()
-		propagationChan := jim.StartReceiving(client, Verbose)
+		ipcPort := jim.InitializeClient(Verbose)
 
-		ensureServerStatusIsReady(client, propagationChan)
+		if !ipcPort.MakeServerReady() {
+			log.Fatal("Server is not ready. Unless you've seen other error messages on the screen, this is likely an implementation error.")
+		}
 
-		response := jim.GetMatchingServer(strings.Join(args, " "), client, propagationChan)
-		client.Close()
+		response := ipcPort.GetMatchingServer(strings.Join(args, " "))
+		ipcPort.Close()
 		log.Println("Connection: ", response.Connection)
 		err := connectToServer(&response.Server)
 		if err != nil {
@@ -69,25 +67,13 @@ func init() {
 	// connectCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-func connectToServer(server *model.Server) error {
-	var sshFlags []string
-	if Verbose {
-		sshFlags = append(sshFlags, VerboseFlag)
-	}
-
+func connectToServer(server *domain.Server) error {
 	if len(server.Password) == 0 {
-		sshArgs := []string{"-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username + "@" + server.Host, "cd " + server.Dir + "; " + "bash"}
-		sshArgs = append(sshFlags, sshArgs...)
-
-		cmd := exec.Command("ssh", sshArgs...)
+		cmd := exec.Command("ssh", "-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
 		return interactiveConsole(cmd)
 	}
 
-	sshPassArgs := []string{"-e", "ssh"}
-	sshPassArgs = append(sshPassArgs, sshFlags...)
-	sshPassArgs = append(sshPassArgs, "-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
-
-	cmd := exec.Command("sshpass", sshPassArgs...)
+	cmd := exec.Command("sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "SSHPASS="+server.Password)
 	return interactiveConsole(cmd)
