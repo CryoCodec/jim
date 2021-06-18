@@ -1,6 +1,6 @@
 module github.com/CryoCodec/jim
 
-go 1.14
+go 1.16
 
 require (
 	github.com/james-barrow/golang-ipc v0.0.0-20210220104341-b3d1bf21df53
