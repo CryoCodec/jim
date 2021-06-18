@@ -13,6 +13,8 @@ import (
 	"github.com/CryoCodec/jim/model"
 )
 
+const VerboseFlag = "-v"
+
 // connectCmd represents the connect command
 var connectCmd = &cobra.Command{
 	Use:   "connect",
@@ -43,10 +45,15 @@ var connectCmd = &cobra.Command{
 
 		ensureServerStatusIsReady(client, propagationChan)
 
+		var sshFlags []string
+		if Verbose {
+			sshFlags = append(sshFlags, VerboseFlag)
+		}
+
 		response := jim.GetMatchingServer(strings.Join(args, " "), client, propagationChan)
 		client.Close()
 		log.Println("Connection: ", response.Connection)
-		err := connectToServer(&response.Server)
+		err := connectToServer(&response.Server, sshFlags)
 		if err != nil {
 			log.Fatal("Error: ", err.Error())
 		}
@@ -67,13 +74,23 @@ func init() {
 	// connectCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-func connectToServer(server *model.Server) error {
+func connectToServer(server *model.Server, sshFlags []string) error {
+	sshArgs := []string{
+		"-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username + "@" + server.Host, "cd " + server.Dir + "; " + "bash",
+	}
+
+	sshArgs = append(sshFlags, sshArgs...)
+
 	if len(server.Password) == 0 {
-		cmd := exec.Command("ssh", "-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
+		cmd := exec.Command("ssh", sshArgs...)
 		return interactiveConsole(cmd)
 	}
 
-	cmd := exec.Command("sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
+	sshPassArgs := []string{"-e", "ssh"}
+	sshPassArgs = append(sshPassArgs, sshFlags...)
+	sshPassArgs = append(sshPassArgs, "-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
+
+	cmd := exec.Command("sshpass", sshPassArgs...)
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "SSHPASS="+server.Password)
 	return interactiveConsole(cmd)
