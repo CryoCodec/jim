@@ -1,4 +1,4 @@
-package ipc
+package domain
 
 // Denotes the message types uesd for server communication
 const (
@@ -31,7 +31,7 @@ type Message struct {
 	Payload []byte
 }
 
-var msgCodeToString = map[uint16]string{
+var MsgCodeToString = map[uint16]string{
 	ReqAttemptDecryption:         `REQ_ATTEMPT_DECRYPTION`,
 	ResDecryptionFailed:          `RES_DECRYPTION_FAILED`,
 	ResJsonDeserializationFailed: `RES_JSON_DESERIALIZATION_FAILED`,

@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var Verbose bool = false
+var Verbose = false
 var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands

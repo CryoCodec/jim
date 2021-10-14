@@ -57,25 +57,25 @@ func Listen(server *ipc.Server) {
 			state.isDecrypted = false
 			state.jsonConfig = nil
 		case m := <-readC:
-			log.Println("Received message " + msgCodeToString[uint16(m.MsgType)])
+			log.Println("Received message " + domain.MsgCodeToString[uint16(m.MsgType)])
 			switch m.MsgType {
-			case ReqLoadFile:
+			case domain.ReqLoadFile:
 				handleLoadFile(server, &state, m.Data)
-			case ReqStatus:
+			case domain.ReqStatus:
 				handleStatusRequest(server, &state)
-			case ReqAttemptDecryption:
+			case domain.ReqAttemptDecryption:
 				handleDecryption(server, &state, m.Data)
-			case ReqListEntries:
+			case domain.ReqListEntries:
 				handleListRequest(server, &state)
 				go func() { resetC <- true }()
-			case ReqClosestMatch:
+			case domain.ReqClosestMatch:
 				handleClosestMatch(server, &state, string(m.Data))
 				go func() { resetC <- true }()
-			case ReqClosestN:
+			case domain.ReqClosestN:
 				handleClosest10(server, &state, string(m.Data))
 			default:
-				log.Println("Received unexpected message of type " + msgCodeToString[uint16(m.MsgType)] + ": " + string(m.Data))
-				answer(server, ResError, []byte(fmt.Sprintf("Received unexpected message of type %s", msgCodeToString[uint16(m.MsgType)])))
+				log.Println("Received unexpected message of type " + domain.MsgCodeToString[uint16(m.MsgType)] + ": " + string(m.Data))
+				answer(server, domain.ResError, []byte(fmt.Sprintf("Received unexpected message of type %s", domain.MsgCodeToString[uint16(m.MsgType)])))
 			}
 		}
 	}
@@ -106,7 +106,7 @@ func readLoop(server *ipc.Server) chan *ipc.Message {
 			} else {
 				// error case, something went terribly wrong
 				// try to give a reason, however this message will probably not be received
-				server.Write(ResError, []byte(err.Error()))
+				server.Write(domain.ResError, []byte(err.Error()))
 				log.Fatal("Fatal error:", err.Error())
 			}
 		}
@@ -116,43 +116,43 @@ func readLoop(server *ipc.Server) chan *ipc.Message {
 
 func handleStatusRequest(server *ipc.Server, state *serverState) {
 	if state.encryptedFileContents == nil {
-		answer(server, ResRequireConfigFile, []byte{})
+		answer(server, domain.ResRequireConfigFile, []byte{})
 		return
 	}
 
 	if state.isDecrypted {
-		answer(server, ResReadyToServe, []byte{})
+		answer(server, domain.ResReadyToServe, []byte{})
 	} else {
-		answer(server, ResNeedDecryption, []byte{})
+		answer(server, domain.ResNeedDecryption, []byte{})
 	}
 }
 
 func handleDecryption(server *ipc.Server, state *serverState, passphrase []byte) {
 	if state.encryptedFileContents == nil {
-		answer(server, ResError, []byte("No configuration was loaded."))
+		answer(server, domain.ResError, []byte("No configuration was loaded."))
 		return
 	}
 
 	if state.isDecrypted {
-		answer(server, ResSuccess, []byte{})
+		answer(server, domain.ResSuccess, []byte{})
 		return
 	}
 
 	cipherText, err := b64.StdEncoding.DecodeString(string(state.encryptedFileContents))
 	if err != nil {
-		answer(server, ResDecryptionFailed, []byte(fmt.Sprintf("Corrupt configuration file, failed at base64 decode. Reason: %s", err.Error())))
+		answer(server, domain.ResDecryptionFailed, []byte(fmt.Sprintf("Corrupt configuration file, failed at base64 decode. Reason: %s", err.Error())))
 		return
 	}
 
 	clearText, err := crypto.Decrypt(passphrase, cipherText)
 	if err != nil {
-		answer(server, ResDecryptionFailed, []byte(fmt.Sprintf("Failed to decrypt the configuration file. Reason: %s", err.Error())))
+		answer(server, domain.ResDecryptionFailed, []byte(fmt.Sprintf("Failed to decrypt the configuration file. Reason: %s", err.Error())))
 		return
 	}
 
 	parsed, err := domain.UnmarshalJimConfig(clearText)
 	if err != nil {
-		answer(server, ResJsonDeserializationFailed, []byte(fmt.Sprintf("Failed to unmarshal json config. Reason: %s", err.Error())))
+		answer(server, domain.ResJsonDeserializationFailed, []byte(fmt.Sprintf("Failed to unmarshal json config. Reason: %s", err.Error())))
 		return
 	}
 
@@ -165,31 +165,31 @@ func handleDecryption(server *ipc.Server, state *serverState, passphrase []byte)
 	state.matcher = closestmatch.New(dict, bagSize)
 	state.jsonConfig = parsed
 	state.isDecrypted = true
-	answer(server, ResSuccess, []byte{})
+	answer(server, domain.ResSuccess, []byte{})
 }
 
 func handleLoadFile(server *ipc.Server, state *serverState, payload []byte) {
 	path := string(payload)
 	if !files.Exists(path) {
-		answer(server, ResError, []byte(fmt.Sprintf("File at %s does not exist or is a directory", path)))
+		answer(server, domain.ResError, []byte(fmt.Sprintf("File at %s does not exist or is a directory", path)))
 		return
 	}
 
 	fileContents, err := ioutil.ReadFile(path)
 	if err != nil {
-		answer(server, ResError, []byte(fmt.Sprintf("Could not read file at %s, reason: %s", path, err.Error())))
+		answer(server, domain.ResError, []byte(fmt.Sprintf("Could not read file at %s, reason: %s", path, err.Error())))
 		return
 	}
 
 	state.encryptedFileContents = fileContents
 	state.isDecrypted = false
 
-	answer(server, ResSuccess, []byte{})
+	answer(server, domain.ResSuccess, []byte{})
 }
 
 func handleListRequest(server *ipc.Server, state *serverState) {
 	if !state.isDecrypted {
-		answer(server, ResNeedDecryption, []byte("Need Decryption"))
+		answer(server, domain.ResNeedDecryption, []byte("Need Decryption"))
 		return
 	}
 
@@ -206,19 +206,19 @@ func handleListRequest(server *ipc.Server, state *serverState) {
 		el := domain.ListResponseElement{Title: k, Content: v}
 		message, err := el.Marshal()
 		if err != nil {
-			answer(server, ResError, []byte("Failed to serialize json content. This is likely an implementation error"))
+			answer(server, domain.ResError, []byte("Failed to serialize json content. This is likely an implementation error"))
 			return
 		}
 
-		answer(server, ResListEntries, []byte(message))
+		answer(server, domain.ResListEntries, []byte(message))
 	}
 
-	answer(server, ResSuccess, []byte{})
+	answer(server, domain.ResSuccess, []byte{})
 }
 
 func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 	if !state.isDecrypted {
-		answer(server, ResNeedDecryption, []byte("Need Decryption"))
+		answer(server, domain.ResNeedDecryption, []byte("Need Decryption"))
 		return
 	}
 
@@ -230,10 +230,10 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 			response := domain.MatchResponse{Connection: connectionString, Server: config.Server}
 			payload, err := response.Marshal()
 			if err != nil {
-				answer(server, ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
+				answer(server, domain.ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
 				return
 			}
-			answer(server, ResClosestMatch, payload)
+			answer(server, domain.ResClosestMatch, payload)
 			return
 		}
 	}
@@ -247,31 +247,31 @@ func handleClosestMatch(server *ipc.Server, state *serverState, query string) {
 			response := domain.MatchResponse{Connection: connectionString, Server: config.Server}
 			payload, err := response.Marshal()
 			if err != nil {
-				answer(server, ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
+				answer(server, domain.ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
 				return
 			}
-			answer(server, ResClosestMatch, payload)
+			answer(server, domain.ResClosestMatch, payload)
 			return
 		}
 	}
 
-	answer(server, ResNoMatch, []byte{})
+	answer(server, domain.ResNoMatch, []byte{})
 }
 
 func handleClosest10(server *ipc.Server, state *serverState, query string) {
 	if !state.isDecrypted {
-		answer(server, ResNeedDecryption, []byte("Need Decryption"))
+		answer(server, domain.ResNeedDecryption, []byte("Need Decryption"))
 		return
 	}
 
 	match := state.matcher.ClosestN(strings.ToLower(query), 10)
 	bytes, err := json.Marshal(match)
 	if err != nil {
-		answer(server, ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
+		answer(server, domain.ResError, []byte("Failed to deserialize json. This is likely an implementation error"))
 		return
 	}
 
-	answer(server, ResClosestN, bytes)
+	answer(server, domain.ResClosestN, bytes)
 }
 
 func runSetup() *os.File {
@@ -294,7 +294,7 @@ func runSetup() *os.File {
 }
 
 func answer(server *ipc.Server, code int, message []byte) {
-	log.Println("Answering with " + msgCodeToString[uint16(code)])
+	log.Println("Answering with " + domain.MsgCodeToString[uint16(code)])
 	err := server.Write(code, message)
 	if err != nil {
 		log.Fatal("Error: ", err.Error())

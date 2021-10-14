@@ -3,14 +3,13 @@ package cmd
 import (
 	"fmt"
 	"github.com/CryoCodec/jim/core/domain"
+	"github.com/CryoCodec/jim/core/services"
 	"log"
 	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
-
-	jim "github.com/CryoCodec/jim/ipc"
 )
 
 // connectCmd represents the connect command
@@ -24,12 +23,12 @@ var connectCmd = &cobra.Command{
 		if len(args) != 0 {
 			toComplete = fmt.Sprintf("%s %s", strings.Join(args, " "), lastParam)
 		}
-		ipcPort := jim.InitializeClient(Verbose)
-		defer ipcPort.Close()
+		uiService := services.NewUiService(Verbose)
+		defer uiService.ShutDown()
 
-		if ipcPort.IsServerReady() {
+		if uiService.IsServerReady() {
 			cobra.CompDebug(fmt.Sprintf("server is open, trying closestN with %s", toComplete), true)
-			arr := ipcPort.MatchClosestN(toComplete)
+			arr := uiService.MatchClosestN(toComplete)
 			cobra.CompDebug(fmt.Sprintf("Got %v", arr), true)
 			return arr, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -37,16 +36,24 @@ var connectCmd = &cobra.Command{
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		ipcPort := jim.InitializeClient(Verbose)
+		uiService := services.NewUiService(Verbose)
+		defer uiService.ShutDown()
 
-		if !ipcPort.MakeServerReady() {
-			log.Fatal("Server is not ready. Unless you've seen other error messages on the screen, this is likely an implementation error.")
+		query := strings.Join(args, " ")
+		response, err := uiService.GetMatchingServer(query)
+		serviceError, ok := err.(domain.ServiceError)
+
+		if ok && serviceError.IsPasswordRequired() {
+			requestPWandDecrypt(uiService)
+			response, err = uiService.GetMatchingServer(query)
 		}
 
-		response := ipcPort.GetMatchingServer(strings.Join(args, " "))
-		ipcPort.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		log.Println("Connection: ", response.Connection)
-		err := connectToServer(&response.Server)
+		err = connectToServer(&response.Server)
 		if err != nil {
 			log.Fatal("Error: ", err.Error())
 		}
