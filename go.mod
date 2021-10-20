@@ -4,7 +4,6 @@ go 1.16
 
 require (
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/james-barrow/golang-ipc v0.0.0-20210220104341-b3d1bf21df53
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
