@@ -32,7 +32,7 @@ clean:
 	rm -rf dist/
 
 install-requirements-mac-x86_64: _download-protoc-mac-x86_64 _unzip-protoc _locate-protoc _cleanup-tmp _goget-grpc
-install-requirements-linux-x86_64: _download-protoc _unzip-protoc _locate-protoc _cleanup-tmp _goget-grpc
+install-requirements-linux-x86_64: _download-protoc-linux-x86_64 _unzip-protoc _locate-protoc _cleanup-tmp _goget-grpc
 
 protoc: _gen-go-out
 
