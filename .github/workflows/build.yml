@@ -25,6 +25,10 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
+      # Installs protoc etc.
+      - name: install-requirements
+        run: make install-requirements-linux-x86_64
+
       # Runs the build of the client and the server
       - name: build
         run: make build

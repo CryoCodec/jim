@@ -22,6 +22,10 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
+      # Installs protoc etc.
+      - name: install-requirements
+        run: make install-requirements-linux-x86_64
+
       # Builds a release for linux and darwin
       - name: Build release
         run: make release
