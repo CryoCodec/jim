@@ -10,11 +10,9 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/CryoCodec/jim/files"
@@ -23,23 +21,17 @@ import (
 )
 
 type JimServiceImpl struct {
-	readChannel  chan readOp
-	writeChannel chan writeOp
+	readChannel       chan readOp
+	writeChannel      chan writeOp
+	timerResetChannel chan interface{}
 }
 
 // CreateJimService creates a new grpc server instance
 func CreateJimService() pb.JimServer {
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		log.Println("Received SIGTERM, exiting")
-		os.Exit(1)
-	}()
-
 	setupLogging()
 	readChannel, writeChannel := initializeStateManager()
-	return JimServiceImpl{readChannel: readChannel, writeChannel: writeChannel}
+	timerResetChannel := startTimer(writeChannel)
+	return JimServiceImpl{readChannel: readChannel, writeChannel: writeChannel, timerResetChannel: timerResetChannel}
 }
 
 func setupLogging() {
@@ -241,6 +233,7 @@ func (j JimServiceImpl) Match(ctx context.Context, request *pb.MatchRequest) (*p
 		}
 	}
 
+	j.timerResetChannel <- true // resets the timer
 	return nil, errors.New("nothing matched the query")
 }
 
@@ -283,6 +276,7 @@ func (j JimServiceImpl) List(ctx context.Context, request *pb.ListRequest) (*pb.
 		})
 	}
 
+	j.timerResetChannel <- true // resets the timer
 	return &pb.ListReply{Groups: groups}, nil
 }
 
@@ -307,12 +301,14 @@ type serverState struct {
 	matcher               *closestmatch.ClosestMatch
 }
 
-// TODO use timer
-func startTimer() (chan bool, chan bool) {
-	reset := make(chan bool, 1)
-	out := make(chan bool, 1)
+// startTimer starts a timer, that will periodically force the server
+// to close the encrypted state, if not used. This requires the client to run the preamble
+// once again. Returns a channel to reset the timer when written to.
+func startTimer(writeChannel chan writeOp) chan interface{} {
+	reset := make(chan interface{}, 1)
 	duration := 90 * time.Minute
 	timer := time.NewTimer(duration)
+	resetState := &serverState{isDecrypted: false, encryptedFileContents: nil}
 
 	go func() {
 		for {
@@ -323,11 +319,12 @@ func startTimer() (chan bool, chan bool) {
 				}
 				timer.Reset(duration) // this assumes, the timer's channel will be reused
 			case <-timer.C:
-				out <- true // timer fired, require state update
+				writeChannel <- writeOp{newState: resetState} // timer fired, require state update
+				timer.Reset(duration)
 			}
 		}
 	}()
-	return reset, out
+	return reset
 }
 
 func toPbServer(domainServer domain.JimConfigEntry) (*pb.Server, error) {

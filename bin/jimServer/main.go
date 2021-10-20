@@ -9,6 +9,8 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -16,6 +18,15 @@ func main() {
 
 	fmt.Println("Clearing old socket instance")
 	clearSocket(sockAddr)
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		log.Println("Received SIGTERM, exiting")
+		clearSocket(sockAddr)
+		os.Exit(1)
+	}()
 
 	fmt.Println("Starting up server...")
 	listener, err := net.Listen(config.Protocol, sockAddr)
