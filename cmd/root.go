@@ -15,10 +15,8 @@ var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:     "jim",
-	Short:   "A CLI for connecting to multiple SSH Servers",
-	Version: "1.0.0-rc",
-	//	Run: func(cmd *cobra.Command, args []string) {
+	Use:   "jim",
+	Short: "A CLI for connecting to multiple SSH Servers",
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
