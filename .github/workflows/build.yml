@@ -29,6 +29,10 @@ jobs:
       - name: install-requirements
         run: make install-requirements-linux-x86_64
 
+      # Generates grpc implementation
+      - name: protoc
+        run: make protoc
+
       # Runs the build of the client and the server
       - name: build
         run: make build

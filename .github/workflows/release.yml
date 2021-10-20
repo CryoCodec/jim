@@ -6,7 +6,7 @@ name: Release
 on:
   push:
     tags:
-    - '*'
+      - '*'
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
@@ -26,10 +26,14 @@ jobs:
       - name: install-requirements
         run: make install-requirements-linux-x86_64
 
+      # Generates grpc implementation
+      - name: protoc
+        run: make protoc
+
       # Builds a release for linux and darwin
       - name: Build release
         run: make release
-      
+
       - uses: ncipollo/release-action@v1
         with:
           artifacts: "dist/*.tar.gz"
