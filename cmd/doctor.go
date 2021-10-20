@@ -48,7 +48,7 @@ var doctorCmd = &cobra.Command{
 					Group: "This is just used for display purposes",
 					Env:   "This is just used for display purposes",
 					Tag:   "This string is used in the connect command",
-					Server: domain.Server{
+					Server: domain.JimConfigEntry{
 						Host:     "Host name of your Server to connect to",
 						Port:     "The SSH Port on the remote server",
 						Dir:      "The directory you'd like to start after SSH login",
@@ -89,16 +89,6 @@ var doctorCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(doctorCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// doctorCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// doctorCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 func commandExists(cmd string) {

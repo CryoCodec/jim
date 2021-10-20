@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/CryoCodec/jim/core/domain"
 	"github.com/CryoCodec/jim/core/services"
 	"github.com/spf13/cobra"
 	"log"
-	"sort"
 )
 
 // listCmd represents the list command
@@ -19,23 +17,23 @@ var listCmd = &cobra.Command{
 		uiService := services.NewUiService(Verbose)
 		defer uiService.ShutDown()
 
-		entries, err := uiService.GetEntries()
-		serviceError, ok := err.(domain.ServiceError)
-
-		if ok && serviceError.IsPasswordRequired() {
-			requestPWandDecrypt(uiService)
-			entries, err = uiService.GetEntries()
+		// makes sure the server is in the correct state.
+		// might ask the user to enter the master password.
+		err := runPreamble(uiService)
+		if err != nil {
+			log.Fatalf("Received unexpected error: %s", err)
 		}
+
+		groups, err := uiService.GetEntries()
 
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		for _, entry := range entries {
-			fmt.Println(entry.Title)
-			sort.Strings(entry.Content)
-			for _, val := range entry.Content {
-				fmt.Println(val)
+		for _, group := range *groups {
+			fmt.Println(group.Title)
+			for _, entry := range group.Entries {
+				fmt.Printf("%s -> %s\n", entry.Tag, entry.HostInfo)
 			}
 			fmt.Println()
 		}

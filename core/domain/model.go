@@ -2,7 +2,7 @@ package domain
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/pkg/errors"
 )
 
 // JimConfig is a type alias for a list of config elements
@@ -22,14 +22,14 @@ func (r *JimConfig) Marshal() ([]byte, error) {
 
 // JimConfigElement is the main structure in the json format
 type JimConfigElement struct {
-	Group  string `json:"group"`
-	Env    string `json:"env"`
-	Tag    string `json:"tag"`
-	Server Server `json:"server"`
+	Group  string         `json:"group"`
+	Env    string         `json:"env"`
+	Tag    string         `json:"tag"`
+	Server JimConfigEntry `json:"server"`
 }
 
-// Server holds all the information necessary to connect to a server via ssh
-type Server struct {
+// JimConfigEntry holds all the information necessary to connect to a server via ssh
+type JimConfigEntry struct {
 	Host     string `json:"host"`
 	Dir      string `json:"dir"`
 	Port     string `json:"port"`
@@ -37,80 +37,77 @@ type Server struct {
 	Password string `json:"password"`
 }
 
-// MatchResponse is used in the client server communication as the reponse format of the connect command
-type MatchResponse struct {
-	Connection string `json:"connection"`
-	Server     Server `json:"server"`
+// Match is used in the client server communication as the reponse format of the connect command
+type Match struct {
+	Tag    string
+	Server Server
 }
 
-// UnmarshalMatchResponse parses the given byte[] in json format into a MatchResponse struct
-func UnmarshalMatchResponse(data []byte) (MatchResponse, error) {
-	var s MatchResponse
-	err := json.Unmarshal(data, &s)
-	return s, err
+// Server holds all the information necessary to connect to a server via ssh
+type Server struct {
+	Host     string
+	Dir      string
+	Port     int
+	Username string
+	Password []byte
 }
 
-// Marshal serializes a MatchResponse struct to json
-func (s *MatchResponse) Marshal() ([]byte, error) {
-	return json.Marshal(s)
-}
+type GroupList []Group
 
-// ListResponse is a type alias for a list of ListResponseElements
-type ListResponse []ListResponseElement
-
-// ListResponseElement is used in the client server communication as a response format in the list command
-type ListResponseElement struct {
-	Title   string   `json:"title"`
-	Content []string `json:"content"`
-}
-
-// UnmarshalListResponseElement deserializes given byte[] in json format to a ListReponseElement struct
-func UnmarshalListResponseElement(data []byte) (ListResponseElement, error) {
-	var r ListResponseElement
-	err := json.Unmarshal(data, &r)
-	return r, err
-}
-
-// Marshal deserializes a ListReponseElement to json
-func (r *ListResponseElement) Marshal() ([]byte, error) {
-	return json.Marshal(r)
-}
-
-// ListEntries is used to serve the UI. It contains information about the configured servers.
-type ListEntries []ListEntry
-type ListEntry struct {
+type Group struct {
 	Title   string
-	Content []string
+	Entries ConnectionList
 }
+
+func (a GroupList) Len() int           { return len(a) }
+func (a GroupList) Less(i, j int) bool { return a[i].Title < a[j].Title }
+func (a GroupList) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
+// ConnectionList is a type alias for a list of ListResponseElements
+type ConnectionList []ConnectionInfo
 
 // functions used to implement the sort interface
-func (a ListEntries) Len() int           { return len(a) }
-func (a ListEntries) Less(i, j int) bool { return a[i].Title < a[j].Title }
-func (a ListEntries) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ConnectionList) Len() int           { return len(a) }
+func (a ConnectionList) Less(i, j int) bool { return a[i].Tag < a[j].Tag }
+func (a ConnectionList) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 
-type ServiceError struct {
-	errorType ServiceCode
-}
-
-func (e ServiceError) Error() string {
-	return fmt.Sprintf("The server returned: %s.", ServiceCodeToString[e.errorType])
-}
-
-func (e *ServiceError) IsPasswordRequired() bool {
-	return e.errorType == RequiresDecryption
-}
-
-// NewServiceError is used as a constructor to create service errors with a given message code.
-func NewServiceError(code ServiceCode) *ServiceError {
-	return &ServiceError{code}
+// ConnectionInfo is used in the client server communication as a response format in the list command
+type ConnectionInfo struct {
+	Tag      string
+	HostInfo string
 }
 
 const (
-	RequiresDecryption = iota + 1
+	RequiresConfigFile = iota
+	RequiresDecryption
+	Ready
 )
 
-type ServiceCode int
+type ServerState struct {
+	state int
+}
 
-var ServiceCodeToString = map[ServiceCode]string{
-	RequiresDecryption: `decryption required`,
+func (s *ServerState) IsReady() bool {
+	return s.state == Ready
+}
+
+func (s *ServerState) RequiresConfigFile() bool {
+	return s.state == RequiresConfigFile
+}
+
+func (s *ServerState) RequiresDecryption() bool {
+	return s.state == RequiresDecryption
+}
+
+func NewServerState(state int) (*ServerState, error) {
+	switch state {
+	case RequiresConfigFile:
+		return &ServerState{state: state}, nil
+	case RequiresDecryption:
+		return &ServerState{state: state}, nil
+	case Ready:
+		return &ServerState{state: state}, nil
+	default:
+		return nil, errors.Errorf("Unknown server state as parameter: %d", state)
+	}
 }

@@ -24,3 +24,6 @@ build/
 dist/
 
 .idea/
+
+tools/
+internal/

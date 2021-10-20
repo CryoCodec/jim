@@ -47,6 +47,8 @@ The connect command will open a SSH connection to the server associated with the
 ## Build
 Just checkout this repository and run: 
 ```bash
+make install-requirements-mac-x86_64 # or install-requirements-linux-x86_64
+make protoc
 make build
 ```
 It is not necessary to build in the GOPATH. The build is tested on the latest GO v1.16.

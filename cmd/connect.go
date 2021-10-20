@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -39,20 +40,19 @@ var connectCmd = &cobra.Command{
 		uiService := services.NewUiService(Verbose)
 		defer uiService.ShutDown()
 
+		err := runPreamble(uiService)
+		if err != nil {
+			log.Fatalf("Received unexpected error: %s", err)
+		}
+
 		query := strings.Join(args, " ")
 		response, err := uiService.GetMatchingServer(query)
-		serviceError, ok := err.(domain.ServiceError)
-
-		if ok && serviceError.IsPasswordRequired() {
-			requestPWandDecrypt(uiService)
-			response, err = uiService.GetMatchingServer(query)
-		}
 
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		log.Println("Connection: ", response.Connection)
+		log.Println("Tag: ", response.Tag)
 		err = connectToServer(&response.Server)
 		if err != nil {
 			log.Fatal("Error: ", err.Error())
@@ -62,27 +62,17 @@ var connectCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(connectCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// connectCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// connectCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
 func connectToServer(server *domain.Server) error {
 	if len(server.Password) == 0 {
-		cmd := exec.Command("ssh", "-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
+		cmd := exec.Command("ssh", "-o", "StrictHostKeyChecking=no", "-p", strconv.Itoa(server.Port), "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
 		return interactiveConsole(cmd)
 	}
 
-	cmd := exec.Command("sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-p", server.Port, "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
+	cmd := exec.Command("sshpass", "-e", "ssh", "-o", "StrictHostKeyChecking=no", "-p", strconv.Itoa(server.Port), "-t", server.Username+"@"+server.Host, "cd "+server.Dir+"; "+"bash")
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "SSHPASS="+server.Password)
+	cmd.Env = append(cmd.Env, "SSHPASS="+string(server.Password))
 	return interactiveConsole(cmd)
 }
 

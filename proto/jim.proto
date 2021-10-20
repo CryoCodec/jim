@@ -1,0 +1,132 @@
+syntax = "proto3";
+option go_package = "internal/proto";
+
+// The jim service definition.
+service Jim {
+  // Queries the current server state
+  rpc GetState (StateRequest) returns (StateReply) {}
+
+  // Loads a config file from given destination
+  rpc LoadConfigFile (LoadRequest) returns (LoadReply) {}
+
+  // attempts to decrypt the loaded config file
+  rpc Decrypt (DecryptRequest) returns (DecryptReply) {}
+
+  // returns the config entry matching the query string the best
+  rpc Match (MatchRequest) returns (MatchReply) {}
+
+  // returns the n config entries matching the query string the best
+  rpc MatchN (MatchNRequest) returns (MatchNReply) {}
+
+  // lists all entries in the config file, potentially filtered
+  rpc List (ListRequest) returns (ListReply) {}
+}
+
+enum ResponseType {
+  SUCCESS = 0;
+  FAILURE = 1;
+}
+
+// Asks for the server's current state
+message StateRequest {}
+
+// The request message containing the server's state.
+message StateReply {
+  enum State {
+    CONFIG_FILE_REQUIRED = 0;
+    DECRYPTION_REQUIRED = 1;
+    READY = 2;
+  }
+  State state = 1;
+}
+
+// Asks the server to load a config file
+// from the specified destination
+message LoadRequest {
+  string destination = 1;
+}
+
+// Answers a LoadRequest
+message LoadReply {
+  ResponseType responseType = 1;
+  string reason = 2;
+}
+
+// Asks the server to decrypt the config file
+// with given password
+message DecryptRequest {
+  bytes password = 1;
+}
+
+// Answers a DecryptRequest
+message DecryptReply {
+  ResponseType responseType = 1;
+  string reason = 2;
+}
+
+// Asks the server for the config entry
+// matching the query the closest
+message MatchRequest {
+  string query = 1;
+}
+
+// Answers a MatchRequest
+message MatchReply {
+  string tag = 1;
+  Server server = 2;
+}
+
+// Asks the server for the config entries
+// matching the query the closest
+message MatchNRequest {
+  string query = 1;
+  int32 numberOfResults = 2;
+}
+
+// Answers a MatchNRequest
+message MatchNReply {
+  repeated string tags = 1;
+}
+
+// Asks the server for all config entries
+// potentially filtered by a query string
+message ListRequest {
+  Filter filter = 1;
+}
+
+// Answers a MatchNRequest
+message ListReply {
+  repeated Group groups = 1;
+}
+
+// Describes the public info of a config entry
+message PublicServerInfo {
+  string host = 1;
+  string directory = 2;
+}
+
+// Describes a full config entry, including secret info
+message Server {
+  PublicServerInfo info = 1;
+  int32 port = 2;
+  string username = 3;
+  bytes password = 4;
+}
+
+// Describes a filter, that may be applied
+message Filter {
+  string tag = 1;
+  string host = 2;
+}
+
+// Describes a group of config entries, as returned by the list command
+message Group {
+  string title = 1;
+  repeated GroupEntry entries = 2;
+
+}
+
+message GroupEntry {
+  string tag = 1;
+  PublicServerInfo info = 2;
+}

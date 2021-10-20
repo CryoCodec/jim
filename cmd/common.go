@@ -15,15 +15,14 @@ func requestPWandDecrypt(uiService services.UiService) {
 		}
 
 		password := readPasswordFromTerminal()
-		isSuccess, err := uiService.Decrypt(password)
+		err := uiService.Decrypt(password)
 		if err != nil {
-			log.Fatal(err)
-		}
-		if !isSuccess {
 			attempt--
-			log.Println("Decryption failed, remaining attempts ", attempt)
+			log.Printf("Decryption failed, reason: %s remaining attempts %d", err, attempt)
 			continue
 		}
+
+		return
 	}
 }
 
@@ -34,4 +33,27 @@ func readPasswordFromTerminal() []byte {
 		log.Fatal("Error reading the password from terminal")
 	}
 	return bytePassword
+}
+
+func runPreamble(uiService services.UiService) error {
+	for {
+		serverState, err := uiService.GetState()
+		if err != nil {
+			return err
+		}
+
+		if serverState.IsReady() {
+			return nil
+		}
+
+		if serverState.RequiresDecryption() {
+			requestPWandDecrypt(uiService)
+		}
+
+		if serverState.RequiresConfigFile() {
+			if err := uiService.ReloadConfigFile(); err != nil {
+				return err
+			}
+		}
+	}
 }

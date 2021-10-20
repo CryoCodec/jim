@@ -9,13 +9,13 @@ type IpcPort interface {
 	// LoadConfigFile requests the daemon process to load a config file
 	LoadConfigFile(path string) error
 	// AttemptDecryption requests a decryption attempt from the daemon, using the passed password
-	AttemptDecryption(password []byte) domain.Code
+	AttemptDecryption(password []byte) error
 	// GetMatchingServer requests a server entry from the daemon, that matches the given query string.
 	// Requires the daemon to be in ready state.
-	GetMatchingServer(query string) (*domain.MatchResponse, error)
+	GetMatchingServer(query string) (*domain.Match, error)
 	// GetEntries requests all entries of the loaded config from the daemon.
 	// Requires the daemon to be in ready state.
-	GetEntries() (chan domain.ListResponseElement, error)
+	GetEntries() (*domain.GroupList, error)
 	// MatchClosestN gets a list of n potentially matching entries in the config file.
 	// Requires the daemon to be in ready state.
 	MatchClosestN(query string) []string
@@ -23,7 +23,7 @@ type IpcPort interface {
 	// if a config file was loaded successfully and decrypted.
 	IsServerReady() bool
 	// ServerStatus queries and returns the server state.
-	ServerStatus() domain.Code
+	ServerStatus() (*domain.ServerState, error)
 	// Close closes the underlying ipc connection
-	Close()
+	Close() error
 }
