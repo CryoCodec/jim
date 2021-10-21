@@ -3,10 +3,10 @@ package server
 import (
 	"context"
 	b64 "encoding/base64"
-	"errors"
 	"fmt"
-	"github.com/CryoCodec/jim/config"
+	configuration "github.com/CryoCodec/jim/config"
 	"github.com/CryoCodec/jim/crypto"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
 	"os"
@@ -83,7 +83,7 @@ func initializeStateManager() (chan readOp, chan writeOp) {
 					read.resp <- state
 
 				case ReadContent:
-					read.resp <- state.jsonConfig
+					read.resp <- state.config
 				}
 			case write := <-writes:
 				state = *write.newState
@@ -128,7 +128,7 @@ func (j JimServiceImpl) LoadConfigFile(ctx context.Context, request *pb.LoadRequ
 	newState := &serverState{
 		isDecrypted:           false,
 		encryptedFileContents: fileContents,
-		jsonConfig:            nil,
+		config:                nil,
 		matcher:               nil,
 	}
 
@@ -171,7 +171,7 @@ func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest)
 		}, nil
 	}
 
-	parsed, err := config.UnmarshalJimConfig(clearText)
+	parsed, err := configuration.UnmarshalJimConfig(clearText)
 	if err != nil {
 		return &pb.DecryptReply{
 			ResponseType: pb.ResponseType_FAILURE,
@@ -184,11 +184,16 @@ func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest)
 		dict = append(dict, configEntry.Tag)
 	}
 
+	resultConfig, err := toServerConfig(&parsed)
+	if err != nil {
+		return nil, err
+	}
+
 	bagSize := []int{2, 3, 4, 5}
 	newState := &serverState{
 		isDecrypted:           true,
 		encryptedFileContents: state.encryptedFileContents,
-		jsonConfig:            parsed,
+		config:                resultConfig,
 		matcher:               closestmatch.New(dict, bagSize),
 	}
 
@@ -208,12 +213,9 @@ func (j JimServiceImpl) Match(ctx context.Context, request *pb.MatchRequest) (*p
 
 	// first we try to find the exact match. It can be annoying, when similar tags are used
 	// and the wrong one is returned
-	for _, config := range state.jsonConfig {
+	for _, config := range *state.config {
 		if config.Tag == request.Query {
-			pbServer, err := toPbServer(config.Server)
-			if err != nil {
-				return nil, err
-			}
+			pbServer := toPbServer(config.Server)
 			connectionString := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
 			return &pb.MatchReply{Tag: connectionString, Server: pbServer}, nil
 		}
@@ -222,12 +224,9 @@ func (j JimServiceImpl) Match(ctx context.Context, request *pb.MatchRequest) (*p
 	// now we try to find the closest match
 	match := state.matcher.Closest(strings.ToLower(request.Query))
 
-	for _, config := range state.jsonConfig {
+	for _, config := range *state.config {
 		if config.Tag == match {
-			pbServer, err := toPbServer(config.Server)
-			if err != nil {
-				return nil, err
-			}
+			pbServer := toPbServer(config.Server)
 			connectionString := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
 			return &pb.MatchReply{Tag: connectionString, Server: pbServer}, nil
 		}
@@ -254,7 +253,7 @@ func (j JimServiceImpl) List(ctx context.Context, request *pb.ListRequest) (*pb.
 	}
 
 	groupings := make(map[string][]*pb.GroupEntry)
-	for _, config := range state.jsonConfig {
+	for _, config := range *state.config {
 		title := fmt.Sprintf("%s - %s", config.Group, config.Env)
 		value := &pb.GroupEntry{
 			Tag: config.Tag,
@@ -287,17 +286,17 @@ func (j JimServiceImpl) readState() serverState {
 	return val.(serverState)
 }
 
-func (j JimServiceImpl) readContent() config.JimConfig {
+func (j JimServiceImpl) readContent() configuration.JimConfig {
 	resp := make(chan interface{})
 	j.readChannel <- readOp{opType: ReadContent, resp: resp}
 	val := <-resp
-	return val.(config.JimConfig)
+	return val.(configuration.JimConfig)
 }
 
 type serverState struct {
 	isDecrypted           bool
 	encryptedFileContents []byte
-	jsonConfig            config.JimConfig
+	config                *Config
 	matcher               *closestmatch.ClosestMatch
 }
 
@@ -327,16 +326,56 @@ func startTimer(writeChannel chan writeOp) chan interface{} {
 	return reset
 }
 
-func toPbServer(domainServer config.JimConfigEntry) (*pb.Server, error) {
-	port, err := strconv.Atoi(domainServer.Port)
-	if err != nil {
-		return nil, err
-	}
-
+func toPbServer(domainServer ConfigEntry) *pb.Server {
 	return &pb.Server{
 		Info:     &pb.PublicServerInfo{Host: domainServer.Host, Directory: domainServer.Dir},
-		Port:     int32(port),
+		Port:     int32(domainServer.Port),
 		Username: domainServer.Username,
-		Password: []byte(domainServer.Password),
-	}, nil
+		Password: domainServer.Password,
+	}
+}
+
+// Config is a type alias for a list of config elements
+type Config []ConfigElement
+
+// ConfigElement is the main structure used within the server
+type ConfigElement struct {
+	Group  string
+	Env    string
+	Tag    string
+	Server ConfigEntry
+}
+
+// ConfigEntry holds all the information necessary to connect to a server via ssh
+type ConfigEntry struct {
+	Host     string
+	Dir      string
+	Port     int
+	Username string
+	Password []byte
+}
+
+func toServerConfig(jimConfig *configuration.JimConfig) (*Config, error) {
+	var result Config
+	for _, el := range *jimConfig {
+		server := el.Server
+		port, err := strconv.Atoi(server.Port)
+		if err != nil {
+			return nil, errors.Errorf("Encountered invalid port in config file: %s", server.Port)
+		}
+		newEl := ConfigElement{
+			Group: el.Group,
+			Env:   el.Env,
+			Tag:   el.Tag,
+			Server: ConfigEntry{
+				Host:     server.Host,
+				Dir:      server.Dir,
+				Port:     port,
+				Username: server.Username,
+				Password: []byte(server.Password),
+			},
+		}
+		result = append(result, newEl)
+	}
+	return &result, nil
 }
