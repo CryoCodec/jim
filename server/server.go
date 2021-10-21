@@ -5,7 +5,7 @@ import (
 	b64 "encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/CryoCodec/jim/core/domain"
+	"github.com/CryoCodec/jim/config"
 	"github.com/CryoCodec/jim/crypto"
 	"io/ioutil"
 	"log"
@@ -171,7 +171,7 @@ func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest)
 		}, nil
 	}
 
-	parsed, err := domain.UnmarshalJimConfig(clearText)
+	parsed, err := config.UnmarshalJimConfig(clearText)
 	if err != nil {
 		return &pb.DecryptReply{
 			ResponseType: pb.ResponseType_FAILURE,
@@ -180,8 +180,8 @@ func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest)
 	}
 
 	var dict []string
-	for _, config := range parsed {
-		dict = append(dict, config.Tag)
+	for _, configEntry := range parsed {
+		dict = append(dict, configEntry.Tag)
 	}
 
 	bagSize := []int{2, 3, 4, 5}
@@ -287,17 +287,17 @@ func (j JimServiceImpl) readState() serverState {
 	return val.(serverState)
 }
 
-func (j JimServiceImpl) readContent() domain.JimConfig {
+func (j JimServiceImpl) readContent() config.JimConfig {
 	resp := make(chan interface{})
 	j.readChannel <- readOp{opType: ReadContent, resp: resp}
 	val := <-resp
-	return val.(domain.JimConfig)
+	return val.(config.JimConfig)
 }
 
 type serverState struct {
 	isDecrypted           bool
 	encryptedFileContents []byte
-	jsonConfig            domain.JimConfig
+	jsonConfig            config.JimConfig
 	matcher               *closestmatch.ClosestMatch
 }
 
@@ -327,7 +327,7 @@ func startTimer(writeChannel chan writeOp) chan interface{} {
 	return reset
 }
 
-func toPbServer(domainServer domain.JimConfigEntry) (*pb.Server, error) {
+func toPbServer(domainServer config.JimConfigEntry) (*pb.Server, error) {
 	port, err := strconv.Atoi(domainServer.Port)
 	if err != nil {
 		return nil, err
