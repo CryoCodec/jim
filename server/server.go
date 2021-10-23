@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -507,7 +508,8 @@ func buildIndexMapping() *mapping.IndexMappingImpl {
 func createIndex(suffix string, resultConfig *Config) (bleve.Index, error) {
 	defer timeTrack(time.Now(), "createIndex")
 	indexName := "jimdex_" + suffix
-	indexPath := filepath.Join(files.GetJimConfigDir(), "indices", indexName)
+	indexDir := filepath.Join(files.GetJimConfigDir(), "indices")
+	indexPath := filepath.Join(indexDir, indexName)
 
 	index, err := bleve.Open(indexPath)
 	if err == nil {
@@ -527,9 +529,11 @@ func createIndex(suffix string, resultConfig *Config) (bleve.Index, error) {
 
 	err = indexDocuments(index, resultConfig)
 	if err != nil {
+		go cleanUpUnusedIndices("", indexDir)
 		return nil, err
 	}
 
+	go cleanUpUnusedIndices(indexName, indexDir)
 	return index, nil
 }
 
@@ -567,6 +571,25 @@ func indexDocuments(index bleve.Index, resultConfig *Config) error {
 		}
 	}
 	return nil
+}
+
+func cleanUpUnusedIndices(exceptForIndex string, indexDirectory string) {
+	dir, err := ioutil.ReadDir(indexDirectory)
+	if err != nil {
+		log.Printf("Failed to clean up old indices: %s", err)
+	}
+	for _, d := range dir {
+		if exceptForIndex == d.Name() {
+			// don't delete the current index
+			continue
+		}
+		// remove all others
+		log.Printf("Deleting old index %s", d.Name())
+		err := os.RemoveAll(path.Join(indexDirectory, d.Name()))
+		if err != nil {
+			log.Printf("Failed to clean up old index %s: %s", d.Name(), err)
+		}
+	}
 }
 
 func timeTrack(start time.Time, name string) {
