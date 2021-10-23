@@ -6,18 +6,21 @@ import (
 	"fmt"
 	configuration "github.com/CryoCodec/jim/config"
 	"github.com/CryoCodec/jim/crypto"
+	"github.com/blevesearch/bleve/v2/analysis/analyzer/keyword"
+	"github.com/blevesearch/bleve/v2/analysis/lang/en"
+	"github.com/blevesearch/bleve/v2/mapping"
+	"github.com/mitchellh/hashstructure/v2"
 	"github.com/pkg/errors"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/CryoCodec/jim/files"
 	pb "github.com/CryoCodec/jim/internal/proto"
-	"github.com/schollz/closestmatch"
+	"github.com/blevesearch/bleve/v2"
 )
 
 type JimServiceImpl struct {
@@ -28,10 +31,14 @@ type JimServiceImpl struct {
 
 // CreateJimService creates a new grpc server instance
 func CreateJimService() pb.JimServer {
+	defer timeTrack(time.Now(), "setup")
 	setupLogging()
 	readChannel, writeChannel := initializeStateManager()
 	timerResetChannel := startTimer(writeChannel)
-	return JimServiceImpl{readChannel: readChannel, writeChannel: writeChannel, timerResetChannel: timerResetChannel}
+	return JimServiceImpl{
+		readChannel:       readChannel,
+		writeChannel:      writeChannel,
+		timerResetChannel: timerResetChannel}
 }
 
 func setupLogging() {
@@ -61,17 +68,20 @@ type opType int
 const (
 	ReadServerState = iota
 	ReadContent
+	WriteCloseState
+	WriteState
 )
 
 type writeOp struct {
+	opType   opType
 	newState *serverState
 }
 
 // initializeStateManager initializes the state governing coroutine.
 // Returns two channels to submit read and write Ops.
 func initializeStateManager() (chan readOp, chan writeOp) {
-	reads := make(chan readOp)
-	writes := make(chan writeOp)
+	reads := make(chan readOp, 3)
+	writes := make(chan writeOp, 3)
 
 	go func() {
 		state := serverState{isDecrypted: false, encryptedFileContents: nil}
@@ -86,7 +96,24 @@ func initializeStateManager() (chan readOp, chan writeOp) {
 					read.resp <- state.config
 				}
 			case write := <-writes:
-				state = *write.newState
+				switch write.opType {
+				case WriteCloseState:
+					state.isDecrypted = false
+					state.config = nil
+					state.grouping = nil
+					if state.index != nil {
+						go func() {
+							err := state.index.Close()
+							if err != nil {
+								log.Printf("Error when closing the index: %s", err)
+							}
+						}()
+					}
+					state.index = nil
+				case WriteState:
+					state = *write.newState
+				}
+
 			}
 		}
 	}()
@@ -95,6 +122,8 @@ func initializeStateManager() (chan readOp, chan writeOp) {
 }
 
 func (j JimServiceImpl) GetState(ctx context.Context, request *pb.StateRequest) (*pb.StateReply, error) {
+	defer timeTrack(time.Now(), "GetState")
+
 	state := j.readState()
 
 	if state.encryptedFileContents == nil {
@@ -109,6 +138,8 @@ func (j JimServiceImpl) GetState(ctx context.Context, request *pb.StateRequest) 
 }
 
 func (j JimServiceImpl) LoadConfigFile(ctx context.Context, request *pb.LoadRequest) (*pb.LoadReply, error) {
+	defer timeTrack(time.Now(), "LoadConfigFile")
+
 	path := request.Destination
 	if !files.Exists(path) {
 		return &pb.LoadReply{
@@ -129,10 +160,13 @@ func (j JimServiceImpl) LoadConfigFile(ctx context.Context, request *pb.LoadRequ
 		isDecrypted:           false,
 		encryptedFileContents: fileContents,
 		config:                nil,
-		matcher:               nil,
+		index:                 nil,
 	}
 
-	j.writeChannel <- writeOp{newState: newState}
+	// close previously opened states. This may be required when this function is used with the 'reload' cmd
+	j.writeChannel <- writeOp{newState: newState, opType: WriteCloseState}
+	// write new state
+	j.writeChannel <- writeOp{newState: newState, opType: WriteState}
 	return &pb.LoadReply{
 		ResponseType: pb.ResponseType_SUCCESS,
 		Reason:       "",
@@ -140,6 +174,8 @@ func (j JimServiceImpl) LoadConfigFile(ctx context.Context, request *pb.LoadRequ
 }
 
 func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest) (*pb.DecryptReply, error) {
+	defer timeTrack(time.Now(), "Decrypt")
+
 	state := j.readState()
 	if state.encryptedFileContents == nil {
 		return &pb.DecryptReply{
@@ -179,25 +215,61 @@ func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest)
 		}, nil
 	}
 
-	var dict []string
-	for _, configEntry := range parsed {
-		dict = append(dict, configEntry.Tag)
-	}
-
 	resultConfig, err := toServerConfig(&parsed)
 	if err != nil {
 		return nil, err
 	}
 
-	bagSize := []int{2, 3, 4, 5}
+	// create the bleve index
+	type pair struct {
+		index bleve.Index
+		err   error
+	}
+
+	returnChan := make(chan pair)
+	go func() {
+		hash, err := hashstructure.Hash(resultConfig, hashstructure.FormatV2, nil)
+		if err != nil {
+			returnChan <- pair{
+				index: nil,
+				err:   errors.Errorf("Failed to hash the config: %d", hash),
+			}
+		}
+
+		index, err := createIndex(strconv.Itoa(int(hash)), resultConfig)
+		if err != nil {
+			returnChan <- pair{
+				index: nil,
+				err:   err,
+			}
+		}
+		returnChan <- pair{
+			index: index,
+			err:   nil,
+		}
+	}()
+
+	// create grouping table for quickly accessing the matched tag
+	groupTable := make(map[string]*ConfigElement)
+	for _, entry := range *resultConfig {
+		copiedEntry := entry // this is required! otherwise & operator always points to the loop variable
+		groupTable[entry.Tag] = &copiedEntry
+	}
+
+	result := <-returnChan
+	if result.err != nil {
+		return nil, err
+	}
+
 	newState := &serverState{
 		isDecrypted:           true,
 		encryptedFileContents: state.encryptedFileContents,
 		config:                resultConfig,
-		matcher:               closestmatch.New(dict, bagSize),
+		index:                 result.index,
+		grouping:              groupTable,
 	}
 
-	j.writeChannel <- writeOp{newState: newState}
+	j.writeChannel <- writeOp{newState: newState, opType: WriteState}
 
 	return &pb.DecryptReply{
 		ResponseType: pb.ResponseType_SUCCESS,
@@ -206,29 +278,34 @@ func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest)
 }
 
 func (j JimServiceImpl) Match(ctx context.Context, request *pb.MatchRequest) (*pb.MatchReply, error) {
+	defer timeTrack(time.Now(), "Match")
+
 	state := j.readState()
 	if !state.isDecrypted {
 		return nil, errors.New("wrong state, requires decryption")
 	}
 
-	// first we try to find the exact match. It can be annoying, when similar tags are used
-	// and the wrong one is returned
-	for _, config := range *state.config {
-		if config.Tag == request.Query {
-			pbServer := toPbServer(config.Server)
-			connectionString := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
-			return &pb.MatchReply{Tag: connectionString, Server: pbServer}, nil
-		}
+	log.Printf("User queried '%s'", request.Query)
+	// now we try to find the closest match
+	query := bleve.NewMatchQuery(fmt.Sprintf("\"%s\"", request.Query))
+	search := bleve.NewSearchRequest(query)
+	search.Size = 1
+	search.Fields = []string{"tag"}
+	searchResults, err := state.index.Search(search)
+
+	if err != nil {
+		return nil, errors.Errorf("Encountered an unexpected error during search: %s", err)
 	}
 
-	// now we try to find the closest match
-	match := state.matcher.Closest(strings.ToLower(request.Query))
-
-	for _, config := range *state.config {
-		if config.Tag == match {
-			pbServer := toPbServer(config.Server)
-			connectionString := fmt.Sprintf("%s -> %s", config.Tag, config.Server.Host)
-			return &pb.MatchReply{Tag: connectionString, Server: pbServer}, nil
+	if len(searchResults.Hits) != 0 {
+		tag := searchResults.Hits[0].Fields["tag"].(string)
+		log.Printf("Query matched '%s'", tag)
+		configEl, ok := state.grouping[tag]
+		if ok {
+			return &pb.MatchReply{
+				Tag:    tag,
+				Server: toPbServer(configEl.Server),
+			}, nil
 		}
 	}
 
@@ -236,17 +313,20 @@ func (j JimServiceImpl) Match(ctx context.Context, request *pb.MatchRequest) (*p
 	return nil, errors.New("nothing matched the query")
 }
 
+// todo remove, no longer required?
 func (j JimServiceImpl) MatchN(ctx context.Context, request *pb.MatchNRequest) (*pb.MatchNReply, error) {
+
 	state := j.readState()
 	if !state.isDecrypted {
 		return nil, errors.New("wrong state, requires decryption")
 	}
 
-	match := state.matcher.ClosestN(strings.ToLower(request.Query), int(request.NumberOfResults))
-	return &pb.MatchNReply{Tags: match}, nil
+	return &pb.MatchNReply{Tags: []string{}}, nil
 }
 
 func (j JimServiceImpl) List(ctx context.Context, request *pb.ListRequest) (*pb.ListReply, error) {
+	defer timeTrack(time.Now(), "List")
+
 	state := j.readState()
 	if !state.isDecrypted {
 		return nil, errors.New("wrong state, requires decryption")
@@ -297,7 +377,8 @@ type serverState struct {
 	isDecrypted           bool
 	encryptedFileContents []byte
 	config                *Config
-	matcher               *closestmatch.ClosestMatch
+	grouping              map[string]*ConfigElement
+	index                 bleve.Index
 }
 
 // startTimer starts a timer, that will periodically force the server
@@ -318,7 +399,7 @@ func startTimer(writeChannel chan writeOp) chan interface{} {
 				}
 				timer.Reset(duration) // this assumes, the timer's channel will be reused
 			case <-timer.C:
-				writeChannel <- writeOp{newState: resetState} // timer fired, require state update
+				writeChannel <- writeOp{newState: resetState, opType: WriteCloseState} // close old state
 				timer.Reset(duration)
 			}
 		}
@@ -326,12 +407,12 @@ func startTimer(writeChannel chan writeOp) chan interface{} {
 	return reset
 }
 
-func toPbServer(domainServer ConfigEntry) *pb.Server {
+func toPbServer(domainServer ServerEntry) *pb.Server {
 	return &pb.Server{
 		Info:     &pb.PublicServerInfo{Host: domainServer.Host, Directory: domainServer.Dir},
 		Port:     int32(domainServer.Port),
-		Username: domainServer.Username,
-		Password: domainServer.Password,
+		Username: domainServer.Credentials.Username,
+		Password: domainServer.Credentials.Password,
 	}
 }
 
@@ -343,14 +424,22 @@ type ConfigElement struct {
 	Group  string
 	Env    string
 	Tag    string
-	Server ConfigEntry
+	Server ServerEntry
 }
 
-// ConfigEntry holds all the information necessary to connect to a server via ssh
-type ConfigEntry struct {
-	Host     string
-	Dir      string
-	Port     int
+func (c ConfigElement) String() string {
+	return fmt.Sprintf("ConfigElement{ group=%s, env=%s, tag=%s, host=%s, Dir=%s }", c.Group, c.Env, c.Tag, c.Server.Host, c.Server.Dir)
+}
+
+// ServerEntry holds all the information necessary to connect to a server via ssh
+type ServerEntry struct {
+	Host        string
+	Dir         string
+	Port        int
+	Credentials credentials
+}
+
+type credentials struct {
 	Username string
 	Password []byte
 }
@@ -367,15 +456,120 @@ func toServerConfig(jimConfig *configuration.JimConfig) (*Config, error) {
 			Group: el.Group,
 			Env:   el.Env,
 			Tag:   el.Tag,
-			Server: ConfigEntry{
-				Host:     server.Host,
-				Dir:      server.Dir,
-				Port:     port,
-				Username: server.Username,
-				Password: []byte(server.Password),
+			Server: ServerEntry{
+				Host: server.Host,
+				Dir:  server.Dir,
+				Port: port,
+				Credentials: credentials{
+					Username: server.Username,
+					Password: []byte(server.Password),
+				},
 			},
 		}
 		result = append(result, newEl)
 	}
 	return &result, nil
+}
+
+type indexDocument struct {
+	Group string `json:"group"`
+	Env   string `json:"env"`
+	Tag   string `json:"tag"`
+	Host  string `json:"host"`
+}
+
+func (i indexDocument) Type() string {
+	return "indexDocument"
+}
+
+func buildIndexMapping() *mapping.IndexMappingImpl {
+	// a generic reusable mapping for english text
+	englishTextFieldMapping := bleve.NewTextFieldMapping()
+	englishTextFieldMapping.Analyzer = en.AnalyzerName
+
+	keywordFieldMapping := bleve.NewTextFieldMapping()
+	keywordFieldMapping.Analyzer = keyword.Name
+
+	entryMapping := bleve.NewDocumentMapping()
+	entryMapping.AddFieldMappingsAt("tag", englishTextFieldMapping)
+	entryMapping.AddFieldMappingsAt("group", englishTextFieldMapping)
+	entryMapping.AddFieldMappingsAt("env", englishTextFieldMapping)
+	entryMapping.AddFieldMappingsAt("host", keywordFieldMapping)
+
+	indexMapping := bleve.NewIndexMapping()
+	indexMapping.AddDocumentMapping("indexDocument", entryMapping)
+
+	indexMapping.DefaultAnalyzer = "en"
+
+	return indexMapping
+}
+
+func createIndex(suffix string, resultConfig *Config) (bleve.Index, error) {
+	defer timeTrack(time.Now(), "createIndex")
+	indexName := "jimdex_" + suffix
+	indexPath := filepath.Join(files.GetJimConfigDir(), "indices", indexName)
+
+	index, err := bleve.Open(indexPath)
+	if err == nil {
+		log.Printf("Reusing existing index %s", indexPath)
+		return index, nil
+	}
+	log.Printf("Error opening the index: %s", err)
+
+	log.Printf("Creating a new index at %s", indexPath)
+	// create a new index
+	indexMapping := buildIndexMapping()
+	index, err = bleve.New(indexPath, indexMapping)
+	if err != nil {
+		log.Printf("Failed to create a new index %s: %s", indexPath, err)
+		return nil, err
+	}
+
+	err = indexDocuments(index, resultConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return index, nil
+}
+
+func indexDocuments(index bleve.Index, resultConfig *Config) error {
+	defer timeTrack(time.Now(), "indexDocuments")
+
+	batch := index.NewBatch()
+	batchCount := 0
+	for i, entry := range *resultConfig {
+		err := batch.Index(strconv.Itoa(i), &indexDocument{
+			Group: entry.Group,
+			Env:   entry.Env,
+			Tag:   entry.Tag,
+			Host:  entry.Server.Host,
+		})
+		if err != nil {
+			return err
+		}
+		batchCount++
+
+		if batchCount > 100 {
+			err := index.Batch(batch)
+			if err != nil {
+				return err
+			}
+			batch = index.NewBatch()
+			batchCount = 0
+		}
+	}
+	// also index last batch
+	if batch.Size() > 0 {
+		err := index.Batch(batch)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func timeTrack(start time.Time, name string) {
+	elapsed := time.Since(start)
+	log.Printf("%s took %s", name, elapsed)
 }

@@ -3,8 +3,10 @@ module github.com/CryoCodec/jim
 go 1.16
 
 require (
+	github.com/blevesearch/bleve/v2 v2.2.1 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/mitchellh/go-homedir v1.1.0
+	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
 	github.com/spf13/cobra v1.1.3

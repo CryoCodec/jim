@@ -26,7 +26,7 @@ func InstantiateAdapter(grpcContext *GrpcContext) ports.IpcPort {
 // LoadConfigFile causes the server to load the config file.
 func (adapter *ipcAdapterImpl) LoadConfigFile(path string) error {
 	client := adapter.grpcContext.client
-	ctx, cancel := adapter.grpcContext.newTimedCtx()
+	ctx, cancel := adapter.grpcContext.newCtxWithDefaultTimeout()
 	defer cancel()
 	reply, err := client.LoadConfigFile(ctx, &pb.LoadRequest{Destination: path})
 	if err != nil {
@@ -45,7 +45,7 @@ func (adapter *ipcAdapterImpl) LoadConfigFile(path string) error {
 // The server has to be in ready state.
 func (adapter *ipcAdapterImpl) GetMatchingServer(query string) (*domain.Match, error) {
 	client := adapter.grpcContext.client
-	ctx, cancel := adapter.grpcContext.newTimedCtx()
+	ctx, cancel := adapter.grpcContext.newCtxWithDefaultTimeout()
 	defer cancel()
 
 	response, err := client.Match(ctx, &pb.MatchRequest{Query: query})
@@ -69,7 +69,7 @@ func (adapter *ipcAdapterImpl) GetMatchingServer(query string) (*domain.Match, e
 // The server has to be in ready state.
 func (adapter *ipcAdapterImpl) GetEntries() (*domain.GroupList, error) {
 	client := adapter.grpcContext.client
-	ctx, cancel := adapter.grpcContext.newTimedCtx()
+	ctx, cancel := adapter.grpcContext.newCtxWithDefaultTimeout()
 	defer cancel()
 	response, err := client.List(ctx, &pb.ListRequest{})
 
@@ -101,7 +101,7 @@ func (adapter *ipcAdapterImpl) GetEntries() (*domain.GroupList, error) {
 // MatchClosestN gets a list of potentially matching entries in the config file
 func (adapter *ipcAdapterImpl) MatchClosestN(query string) []string {
 	client := adapter.grpcContext.client
-	ctx, cancel := adapter.grpcContext.newTimedCtx()
+	ctx, cancel := adapter.grpcContext.newCtxWithDefaultTimeout()
 	defer cancel()
 	response, err := client.MatchN(ctx, &pb.MatchNRequest{
 		Query:           query,
@@ -128,7 +128,7 @@ func (adapter *ipcAdapterImpl) IsServerReady() bool {
 // ServerStatus queries and returns the server state.
 func (adapter *ipcAdapterImpl) ServerStatus() (*domain.ServerState, error) {
 	client := adapter.grpcContext.client
-	ctx, cancel := adapter.grpcContext.newTimedCtx()
+	ctx, cancel := adapter.grpcContext.newCtxWithDefaultTimeout()
 	defer cancel()
 	response, err := client.GetState(ctx, &pb.StateRequest{})
 
@@ -152,7 +152,7 @@ func (adapter *ipcAdapterImpl) ServerStatus() (*domain.ServerState, error) {
 // AttemptDecryption asks the server to try decryption of the config file with the given password.
 func (adapter *ipcAdapterImpl) AttemptDecryption(password []byte) error {
 	client := adapter.grpcContext.client
-	ctx, cancel := adapter.grpcContext.newTimedCtx()
+	ctx, cancel := adapter.grpcContext.newTimedCtx(5 * time.Second)
 	defer cancel()
 	response, err := client.Decrypt(ctx, &pb.DecryptRequest{Password: password})
 
@@ -178,9 +178,14 @@ type GrpcContext struct {
 	conn    *grpc.ClientConn
 }
 
-func (ctx *GrpcContext) newTimedCtx() (context.Context, context.CancelFunc) {
+func (ctx *GrpcContext) newCtxWithDefaultTimeout() (context.Context, context.CancelFunc) {
 	rootCtx := context.Background()
 	return context.WithTimeout(rootCtx, ctx.timeout)
+}
+
+func (ctx *GrpcContext) newTimedCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
+	rootCtx := context.Background()
+	return context.WithTimeout(rootCtx, timeout)
 }
 
 func (ctx *GrpcContext) Close() error {
