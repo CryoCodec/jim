@@ -5,14 +5,16 @@ import (
 	"github.com/CryoCodec/jim/core/domain"
 	"github.com/CryoCodec/jim/core/ports"
 	"github.com/CryoCodec/jim/files"
+	"github.com/pkg/errors"
 	"log"
 	"sort"
+	"strings"
 )
 
 type UiService interface {
 	// GetEntries tries to fetch all configured server items.
 	// Whenever the server is not yet ready, the error will indicate this.
-	GetEntries() (*domain.GroupList, error)
+	GetEntries(filters []string, limit int) (*domain.GroupList, error)
 
 	// GetMatchingServer requests a server entry from the daemon, that matches the given query string.
 	// Requires the daemon to be in ready state.
@@ -47,10 +49,15 @@ type UiServiceImpl struct {
 	ipcPort ports.IpcPort
 }
 
-func (u *UiServiceImpl) GetEntries() (*domain.GroupList, error) {
+func (u *UiServiceImpl) GetEntries(filters []string, limit int) (*domain.GroupList, error) {
+	filter, err := parseFilters(filters)
+	if err != nil {
+		return nil, err
+	}
+
 	ipcPort := u.ipcPort
 
-	list, err := ipcPort.GetEntries()
+	list, err := ipcPort.GetEntries(filter, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -118,4 +125,40 @@ func NewUiService(verboseLogging bool) UiService {
 	// TODO treat the verboseLogging flag properly
 	ipcPort := factory.InstantiateAdapter(factory.InitializeGrpcContext())
 	return &UiServiceImpl{ipcPort: ipcPort}
+}
+
+func parseFilters(filters []string) (*domain.Filter, error) {
+	filter := &domain.Filter{}
+	for _, filterString := range filters {
+		if filterString == "" {
+			continue
+		}
+
+		slice := strings.SplitN(filterString, ":", 2)
+		if len(slice) == 1 { // no prefix used, so it's the free filter.
+			log.Printf("Preparing free filter: %s", slice[0])
+			filter.FreeFilter = slice[0]
+			continue
+		}
+
+		// from here on every filter only applies to a given category
+		if len(slice) != 2 {
+			return nil, errors.Errorf("Encountered invalid filter: %s", filterString)
+		}
+
+		log.Printf("Preparing filter with category %s and value %s", slice[0], slice[1])
+		switch strings.ToLower(slice[0]) {
+		case "env":
+			filter.EnvFilter = slice[1]
+		case "tag":
+			filter.TagFilter = slice[1]
+		case "group":
+			filter.GroupFilter = slice[1]
+		case "host":
+			filter.HostFilter = slice[1]
+		default:
+			return nil, errors.Errorf("Encountered invalid filter category: %s in %s", slice[1], filterString)
+		}
+	}
+	return filter, nil
 }

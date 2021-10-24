@@ -15,7 +15,7 @@ type IpcPort interface {
 	GetMatchingServer(query string) (*domain.Match, error)
 	// GetEntries requests all entries of the loaded config from the daemon.
 	// Requires the daemon to be in ready state.
-	GetEntries() (*domain.GroupList, error)
+	GetEntries(filter *domain.Filter, limit int) (*domain.GroupList, error)
 	// MatchClosestN gets a list of n potentially matching entries in the config file.
 	// Requires the daemon to be in ready state.
 	MatchClosestN(query string) []string

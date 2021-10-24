@@ -92,6 +92,7 @@ message MatchNReply {
 // potentially filtered by a query string
 message ListRequest {
   Filter filter = 1;
+  int32  limit = 2;
 }
 
 // Answers a MatchNRequest
@@ -116,7 +117,10 @@ message Server {
 // Describes a filter, that may be applied
 message Filter {
   string tag = 1;
-  string host = 2;
+  string group = 2;
+  string host = 3;
+  string env = 4;
+  string free = 5;
 }
 
 // Describes a group of config entries, as returned by the list command

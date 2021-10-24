@@ -5,7 +5,11 @@ import (
 	"github.com/CryoCodec/jim/core/services"
 	"github.com/spf13/cobra"
 	"log"
+	"math"
 )
+
+var filters []string
+var limit int32
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
@@ -24,12 +28,13 @@ var listCmd = &cobra.Command{
 			log.Fatalf("Received unexpected error: %s", err)
 		}
 
-		groups, err := uiService.GetEntries()
+		groups, err := uiService.GetEntries(filters, int(limit))
 
 		if err != nil {
 			log.Fatal(err)
 		}
 
+		fmt.Println()
 		for _, group := range *groups {
 			fmt.Println(group.Title)
 			for _, entry := range group.Entries {
@@ -37,9 +42,29 @@ var listCmd = &cobra.Command{
 			}
 			fmt.Println()
 		}
+
+		if len(*groups) == 0 {
+			fmt.Println("Your query did not yield any results.")
+		}
 	},
 }
 
 func init() {
+	filterFlagDescription := `Applies filters to the returned list. 
+You may filter over all attributes, or be more precise by using one or multiple of these categories: 
+- group
+- env
+- host
+- tag
+
+To filter over all attributes use: '-f "Your text of choice"'
+To filter a category, prefix the filter value with the category e.g. '-f "env:INT"'. 
+Use this flag multiple times to apply multiple filters e.g. '-f "env:INT" -f "tag:DB"'`
+
+	limitFlagDescription := `Limits the amount entries to be printed. 
+The result will include the best matched results. 
+This flag is only useful if combined filters.`
 	rootCmd.AddCommand(listCmd)
+	listCmd.Flags().StringArrayVarP(&filters, "filter", "f", []string{}, filterFlagDescription)
+	listCmd.Flags().Int32VarP(&limit, "limit", "l", math.MaxInt32, limitFlagDescription)
 }

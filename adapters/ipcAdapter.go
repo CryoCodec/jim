@@ -67,11 +67,14 @@ func (adapter *ipcAdapterImpl) GetMatchingServer(query string) (*domain.Match, e
 
 // GetEntries asks the server for all entries in the config file and returns these.
 // The server has to be in ready state.
-func (adapter *ipcAdapterImpl) GetEntries() (*domain.GroupList, error) {
+func (adapter *ipcAdapterImpl) GetEntries(filter *domain.Filter, limit int) (*domain.GroupList, error) {
 	client := adapter.grpcContext.client
 	ctx, cancel := adapter.grpcContext.newCtxWithDefaultTimeout()
 	defer cancel()
-	response, err := client.List(ctx, &pb.ListRequest{})
+
+	request := createRequestFromFilters(filter, limit)
+
+	response, err := client.List(ctx, request)
 
 	if err != nil {
 		return nil, err
@@ -96,6 +99,30 @@ func (adapter *ipcAdapterImpl) GetEntries() (*domain.GroupList, error) {
 	}
 
 	return &result, nil
+}
+
+func createRequestFromFilters(filter *domain.Filter, limit int) *pb.ListRequest {
+	pf := &pb.Filter{}
+	request := &pb.ListRequest{Filter: pf, Limit: int32(limit)}
+	if filter.IsAnyFilterSet() {
+		if filter.HasGroupFilter() {
+			pf.Group = filter.GroupFilter
+		}
+		if filter.HasEnvFilter() {
+			pf.Env = filter.EnvFilter
+		}
+		if filter.HasTagFilter() {
+			pf.Tag = filter.TagFilter
+		}
+		if filter.HasHostFilter() {
+			pf.Host = filter.HostFilter
+		}
+		if filter.HasFreeFilter() {
+			pf.Free = filter.FreeFilter
+		}
+	}
+
+	return request
 }
 
 // MatchClosestN gets a list of potentially matching entries in the config file

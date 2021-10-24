@@ -78,3 +78,45 @@ func NewServerState(state int) (*ServerState, error) {
 		return nil, errors.Errorf("Unknown server state as parameter: %d", state)
 	}
 }
+
+type Filter struct {
+	EnvFilter   string
+	GroupFilter string
+	TagFilter   string
+	HostFilter  string
+	FreeFilter  string
+}
+
+func NewFilter(envFilter string, groupFilter string, tagFilter string, hostFilter string, freeFilter string) Filter {
+	return Filter{
+		EnvFilter:   envFilter,
+		GroupFilter: groupFilter,
+		TagFilter:   tagFilter,
+		HostFilter:  hostFilter,
+		FreeFilter:  freeFilter,
+	}
+}
+
+func (f Filter) HasEnvFilter() bool {
+	return f.EnvFilter != ""
+}
+
+func (f Filter) HasGroupFilter() bool {
+	return f.GroupFilter != ""
+}
+
+func (f Filter) HasTagFilter() bool {
+	return f.TagFilter != ""
+}
+
+func (f Filter) HasHostFilter() bool {
+	return f.HostFilter != ""
+}
+
+func (f Filter) HasFreeFilter() bool {
+	return f.FreeFilter != ""
+}
+
+func (f Filter) IsAnyFilterSet() bool {
+	return f.HasEnvFilter() || f.HasTagFilter() || f.HasGroupFilter() || f.HasHostFilter() || f.HasFreeFilter()
+}

@@ -5,10 +5,11 @@ import (
 	b64 "encoding/base64"
 	"fmt"
 	configuration "github.com/CryoCodec/jim/config"
+	"github.com/CryoCodec/jim/core/domain"
 	"github.com/CryoCodec/jim/crypto"
-	"github.com/blevesearch/bleve/v2/analysis/analyzer/keyword"
 	"github.com/blevesearch/bleve/v2/analysis/lang/en"
 	"github.com/blevesearch/bleve/v2/mapping"
+	"github.com/blevesearch/bleve/v2/search/query"
 	"github.com/mitchellh/hashstructure/v2"
 	"github.com/pkg/errors"
 	"io/ioutil"
@@ -141,19 +142,19 @@ func (j JimServiceImpl) GetState(ctx context.Context, request *pb.StateRequest) 
 func (j JimServiceImpl) LoadConfigFile(ctx context.Context, request *pb.LoadRequest) (*pb.LoadReply, error) {
 	defer timeTrack(time.Now(), "LoadConfigFile")
 
-	path := request.Destination
-	if !files.Exists(path) {
+	p := request.Destination
+	if !files.Exists(p) {
 		return &pb.LoadReply{
 			ResponseType: pb.ResponseType_FAILURE,
-			Reason:       fmt.Sprintf("Failed to load config file from %s", path),
+			Reason:       fmt.Sprintf("Failed to load config file from %s", p),
 		}, nil
 	}
 
-	fileContents, err := ioutil.ReadFile(path)
+	fileContents, err := ioutil.ReadFile(p)
 	if err != nil {
 		return &pb.LoadReply{
 			ResponseType: pb.ResponseType_FAILURE,
-			Reason:       fmt.Sprintf("Could not read file at %s, reason: %s", path, err.Error()),
+			Reason:       fmt.Sprintf("Could not read file at %s, reason: %s", p, err.Error()),
 		}, nil
 	}
 
@@ -288,8 +289,8 @@ func (j JimServiceImpl) Match(ctx context.Context, request *pb.MatchRequest) (*p
 
 	log.Printf("User queried '%s'", request.Query)
 	// now we try to find the closest match
-	query := bleve.NewMatchQuery(fmt.Sprintf("\"%s\"", request.Query))
-	search := bleve.NewSearchRequest(query)
+	q := bleve.NewMatchQuery(fmt.Sprintf("tag:\"%s\"", request.Query))
+	search := bleve.NewSearchRequest(q)
 	search.Size = 1
 	search.Fields = []string{"tag"}
 	searchResults, err := state.index.Search(search)
@@ -332,9 +333,21 @@ func (j JimServiceImpl) List(ctx context.Context, request *pb.ListRequest) (*pb.
 	if !state.isDecrypted {
 		return nil, errors.New("wrong state, requires decryption")
 	}
+	filter := &domain.Filter{
+		EnvFilter:   request.Filter.Env,
+		GroupFilter: request.Filter.Group,
+		TagFilter:   request.Filter.Tag,
+		HostFilter:  request.Filter.Host,
+		FreeFilter:  request.Filter.Free,
+	}
+
+	configEntries, err := getEntriesWithFilterApplied(filter, &state, int(request.Limit))
+	if err != nil {
+		return nil, err
+	}
 
 	groupings := make(map[string][]*pb.GroupEntry)
-	for _, config := range *state.config {
+	for _, config := range *configEntries {
 		title := fmt.Sprintf("%s - %s", config.Group, config.Env)
 		value := &pb.GroupEntry{
 			Tag: config.Tag,
@@ -488,14 +501,11 @@ func buildIndexMapping() *mapping.IndexMappingImpl {
 	englishTextFieldMapping := bleve.NewTextFieldMapping()
 	englishTextFieldMapping.Analyzer = en.AnalyzerName
 
-	keywordFieldMapping := bleve.NewTextFieldMapping()
-	keywordFieldMapping.Analyzer = keyword.Name
-
 	entryMapping := bleve.NewDocumentMapping()
 	entryMapping.AddFieldMappingsAt("tag", englishTextFieldMapping)
 	entryMapping.AddFieldMappingsAt("group", englishTextFieldMapping)
 	entryMapping.AddFieldMappingsAt("env", englishTextFieldMapping)
-	entryMapping.AddFieldMappingsAt("host", keywordFieldMapping)
+	entryMapping.AddFieldMappingsAt("host", englishTextFieldMapping)
 
 	indexMapping := bleve.NewIndexMapping()
 	indexMapping.AddDocumentMapping("indexDocument", entryMapping)
@@ -595,4 +605,65 @@ func cleanUpUnusedIndices(exceptForIndex string, indexDirectory string) {
 func timeTrack(start time.Time, name string) {
 	elapsed := time.Since(start)
 	log.Printf("%s took %s", name, elapsed)
+}
+
+func getEntriesWithFilterApplied(filter *domain.Filter, state *serverState, limit int) (*Config, error) {
+	if filter.IsAnyFilterSet() {
+		var queries []query.Query
+		if filter.HasTagFilter() {
+			q := bleve.NewMatchQuery(fmt.Sprintf("tag:\"%s\"", filter.TagFilter))
+			queries = append(queries, q)
+		}
+		if filter.HasEnvFilter() {
+			q := bleve.NewMatchQuery(fmt.Sprintf("env:\"%s\"", filter.EnvFilter))
+			queries = append(queries, q)
+		}
+		if filter.HasHostFilter() {
+			q := bleve.NewMatchQuery(fmt.Sprintf("host:\"%s\"", filter.HostFilter))
+			queries = append(queries, q)
+		}
+		if filter.HasGroupFilter() {
+			q := bleve.NewMatchQuery(fmt.Sprintf("group:\"%s\"", filter.GroupFilter))
+			queries = append(queries, q)
+		}
+		if filter.HasFreeFilter() {
+			q := bleve.NewMatchQuery(fmt.Sprintf("\"%s\"", filter.FreeFilter))
+			queries = append(queries, q)
+		}
+
+		// construct query
+		q := bleve.NewConjunctionQuery(queries...)
+		search := bleve.NewSearchRequest(q)
+		search.Size = limit
+		search.Fields = []string{"tag"}
+		searchResults, err := state.index.Search(search)
+		if err != nil {
+			return nil, errors.Errorf("Error when searching with filters: %s", err)
+		}
+
+		var filteredConfig Config
+		groups := state.grouping
+		for _, sr := range searchResults.Hits {
+			filteredConfig = append(filteredConfig, *groups[sr.Fields["tag"].(string)])
+		}
+		return &filteredConfig, nil
+	}
+
+	if limit > len(*state.config) {
+		// no filter set, just return
+		return state.config, nil
+	}
+
+	var resultConfig Config
+	if limit <= 0 {
+		return &resultConfig, nil
+	}
+
+	// collect up to limit
+	for i, v := range *state.config {
+		if i < limit {
+			resultConfig = append(resultConfig, v)
+		}
+	}
+	return &resultConfig, nil
 }
