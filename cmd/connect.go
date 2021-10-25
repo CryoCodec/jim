@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/CryoCodec/jim/core/domain"
 	"github.com/CryoCodec/jim/core/services"
-	"log"
 	"os"
 	"os/exec"
 	"strconv"
@@ -26,7 +25,7 @@ var connectCmd = &cobra.Command{
 		if len(args) != 0 {
 			toComplete = fmt.Sprintf("%s %s", strings.Join(args, " "), lastParam)
 		}
-		uiService := services.NewUiService(Verbose)
+		uiService := services.NewUiService()
 		defer uiService.ShutDown()
 
 		if uiService.IsServerReady() {
@@ -39,25 +38,27 @@ var connectCmd = &cobra.Command{
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	},
 	Run: func(cmd *cobra.Command, args []string) {
-		uiService := services.NewUiService(Verbose)
+		initLogging()
+
+		uiService := services.NewUiService()
 		defer uiService.ShutDown()
 
 		err := runPreamble(uiService)
 		if err != nil {
-			log.Fatalf("Received unexpected error: %s", err)
+			dief("Received unexpected error: %s", err)
 		}
 
 		query := strings.Join(args, " ")
 		response, err := uiService.GetMatchingServer(query)
 
 		if err != nil {
-			log.Fatal(err)
+			dief("Error: %s", err)
 		}
 
-		log.Println("Tag: ", response.Tag)
+		fmt.Println("Tag: ", response.Tag)
 		err = connectToServer(&response.Server)
 		if err != nil {
-			log.Fatal("Error: ", err.Error())
+			dief("Error: ", err.Error())
 		}
 	},
 }
@@ -68,7 +69,7 @@ func init() {
 
 func connectToServer(server *domain.Server) error {
 	var sshFlags []string
-	if Verbose {
+	if VerbosityLevel >= 1 {
 		sshFlags = append(sshFlags, VerboseFlag)
 	}
 

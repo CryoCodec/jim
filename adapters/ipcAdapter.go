@@ -8,8 +8,8 @@ import (
 	"github.com/CryoCodec/jim/core/ports"
 	pb "github.com/CryoCodec/jim/internal/proto"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
-	"log"
 	"net"
 	"time"
 )
@@ -30,14 +30,14 @@ func (adapter *ipcAdapterImpl) LoadConfigFile(path string) error {
 	defer cancel()
 	reply, err := client.LoadConfigFile(ctx, &pb.LoadRequest{Destination: path})
 	if err != nil {
-		log.Printf("Received unexpected error %s", err)
+		log.Debugf("Received unexpected error %s", err)
 		return err
 	}
 	if reply.ResponseType == pb.ResponseType_FAILURE {
-		log.Printf("Received domain failure response %s", err)
+		log.Debugf("Received domain failure response %s", err)
 		return errors.New(reply.Reason)
 	}
-	log.Printf("Loading the config file was succesful, returing nil")
+
 	return nil
 }
 
@@ -227,11 +227,11 @@ func (ctx *GrpcContext) Close() error {
 // write and receive data from a unix domain socket/named pipe
 func InitializeGrpcContext() *GrpcContext {
 	dialer := func(ctx context.Context, addr string) (net.Conn, error) {
-		log.Println("Dial called")
+		log.Debugf("Dial called with addr:%s and protocol:%s", addr, config.Protocol)
 		return net.Dial(config.Protocol, addr)
 	}
 
-	conn, err := grpc.Dial(config.GetSocketAddress(), grpc.WithInsecure(), grpc.WithContextDialer(dialer))
+	conn, err := grpc.Dial(config.GetSocketAddress(), grpc.WithInsecure(), grpc.WithContextDialer(dialer), withClientUnaryInterceptor())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -239,4 +239,20 @@ func InitializeGrpcContext() *GrpcContext {
 	client := pb.NewJimClient(conn)
 
 	return &GrpcContext{client: client, timeout: 3 * time.Second, conn: conn}
+}
+
+func withClientUnaryInterceptor() grpc.DialOption {
+	return grpc.WithUnaryInterceptor(loggingInterceptor)
+}
+
+func loggingInterceptor(ctx context.Context, method string, req interface{}, reply interface{}, cc *grpc.ClientConn,
+	invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	// Logic before invoking the invoker
+
+	start := time.Now()
+	// Calls the invoker to execute RPC
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	// Logic after invoking the invoker
+	log.Debugf("Invoked RPC method=%s; Duration=%s; Error=%v", method, time.Since(start), err)
+	return err
 }

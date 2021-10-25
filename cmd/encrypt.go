@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"strings"
 	"syscall"
@@ -25,31 +24,33 @@ var encryptCmd = &cobra.Command{
 	The file may then be used with jim`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		initLogging()
+
 		if !files.Exists(args[0]) {
-			log.Fatal("The passed file does not exist or is a directory")
+			die("The passed file does not exist or is a directory")
 		}
 
 		fileContents, err := ioutil.ReadFile(args[0])
 		if err != nil {
-			log.Fatal("Error reading file: ", err.Error())
+			dief("Error reading file: %s", err)
 		}
 
-		log.Println("Enter master password:")
-		password, err := terminal.ReadPassword(int(syscall.Stdin))
+		fmt.Println("Enter master password:")
+		password, err := terminal.ReadPassword(syscall.Stdin)
 		if err != nil {
-			log.Fatal("Error reading the password from terminal. Try again.")
+			die("Error reading the password from terminal. Try again.")
 		}
 
 		cipherText, err := crypto.Encrypt(password, fileContents)
 		if err != nil {
-			log.Fatal("Failed to encrypt the given content. Reason: ", err.Error())
+			dief("Failed to encrypt the given content. Reason: %s", err)
 		}
 
 		sEnc := b64.StdEncoding.EncodeToString(cipherText)
 		destinationPath := args[0] + ".enc"
 
 		if files.Exists(destinationPath) {
-			log.Println(fmt.Sprintf("The destination path %s already exists, overwrite? (y/n)", destinationPath))
+			fmt.Printf("The destination path %s already exists, overwrite? (y/n) \n", destinationPath)
 			reader := bufio.NewReader(os.Stdin)
 			yes, _ := reader.ReadString('\n')
 			if strings.TrimSpace(yes) != "y" {
@@ -57,21 +58,14 @@ var encryptCmd = &cobra.Command{
 			}
 		}
 
-		ioutil.WriteFile(destinationPath, []byte(sEnc), 0644)
-		log.Println(fmt.Sprintf("Wrote output to %s", destinationPath))
+		err = ioutil.WriteFile(destinationPath, []byte(sEnc), 0644)
+		if err != nil {
+			dief("Failed to write to %s: %s", destinationPath, err)
+		}
+		fmt.Printf("Wrote output to %s", destinationPath)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(encryptCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// encryptCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// encryptCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

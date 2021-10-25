@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/CryoCodec/jim/config"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,27 +21,29 @@ var doctorCmd = &cobra.Command{
 	Long:  `Performs a system check and gives hints on how to make jim operational.`,
 	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		log.Println("Checking if the config directory ~/.jim is available")
+		initLogging()
+
+		fmt.Println("Checking if the config directory ~/.jim is available")
 		jimDir := files.GetJimConfigDir()
 		if _, err := os.Stat(jimDir); os.IsNotExist(err) {
-			log.Println("Directory does not exist, creating it...")
+			fmt.Println("Directory does not exist, creating it...")
 			err := os.Mkdir(jimDir, 0740)
 			if err != nil {
-				log.Fatal("Failed to create jim's config directory", jimDir)
+				dief("Failed to create jim's config directory", jimDir)
 			} else {
-				log.Println("---> Success")
+				fmt.Println("---> Success")
 			}
 		} else {
-			log.Println("---> Success")
+			fmt.Println("---> Success")
 		}
 
-		log.Println("Checking config file location")
+		fmt.Println("Checking config file location")
 		path := os.Getenv("JIM_CONFIG_FILE") // env variable has highest priority
 		if path == "" {
-			log.Println("The environment variable JIM_CONFIG_FILE is not set, will use default config location ~/.jim/config.json.enc")
+			fmt.Println("The environment variable JIM_CONFIG_FILE is not set, will use default config location ~/.jim/config.json.enc")
 			configFile := filepath.Join(jimDir, "config.json.enc")
 			if !files.Exists(configFile) {
-				log.Println("The config file does not exist. I will create the dummy file config.json for you. Please update the file and use 'jim encrypt' afterwards.")
+				fmt.Println("The config file does not exist. I will create the dummy file config.json for you. Please update the file and use 'jim encrypt' afterwards.")
 				dummyFilePath := filepath.Join(jimDir, "config.json")
 				dummyValue := config.JimConfigElement{
 					Group: "This is just used for display purposes",
@@ -59,25 +60,31 @@ var doctorCmd = &cobra.Command{
 				jimConfig := config.JimConfig([]config.JimConfigElement{dummyValue})
 				json, err := jimConfig.Marshal()
 				if err != nil {
-					log.Fatal("Failed to deserialize json. This is an implementation bug!")
+					die("Failed to deserialize json. This is an implementation bug!")
 				}
 
 				if files.Exists(dummyFilePath) {
-					log.Println(fmt.Sprintf("The destination path %s already exists, overwrite? (y/n)", dummyFilePath))
+					fmt.Printf("The destination path %s already exists, overwrite? (y/n) \n", dummyFilePath)
 					reader := bufio.NewReader(os.Stdin)
 					yes, _ := reader.ReadString('\n')
 					if strings.TrimSpace(yes) == "y" {
-						ioutil.WriteFile(dummyFilePath, json, 0740)
+						err := ioutil.WriteFile(dummyFilePath, json, 0740)
+						if err != nil {
+							dief("Failed to write the demo file at %s: %s", dummyFilePath, err)
+						}
 					}
 				} else {
-					ioutil.WriteFile(dummyFilePath, json, 0740)
+					err := ioutil.WriteFile(dummyFilePath, json, 0740)
+					if err != nil {
+						dief("Failed to write the demo file at %s: %s", dummyFilePath, err)
+					}
 				}
 
 			}
 		} else {
-			log.Println(fmt.Sprintf("Environment variable JIM_CONFIG_FILE is set, using the path %s", path))
+			fmt.Printf("Environment variable JIM_CONFIG_FILE is set, using the path %s \n", path)
 			if !files.Exists(path) {
-				log.Println("The configured path does not point to an existing file. Please update the environment variable JIM_CONFIG_FILE.")
+				fmt.Println("The configured path does not point to an existing file. Please update the environment variable JIM_CONFIG_FILE.")
 			}
 		}
 
@@ -92,11 +99,11 @@ func init() {
 }
 
 func commandExists(cmd string) {
-	log.Println(fmt.Sprintf("Checking if '%s' is available on Path", cmd))
+	fmt.Printf("Checking if '%s' is available on Path \n", cmd)
 	_, err := exec.LookPath(cmd)
 	if err == nil {
-		log.Println("---> Success")
+		fmt.Println("---> Success")
 	} else {
-		log.Println(fmt.Sprintf("Command '%s' could not be found, but is necessary for jim to work. Please install it and make it available on the PATH", cmd))
+		fmt.Printf("Command '%s' could not be found, but is necessary for jim to work. Please install it and make it available on the PATH \n", cmd)
 	}
 }

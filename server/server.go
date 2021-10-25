@@ -104,12 +104,10 @@ func initializeStateManager() (chan readOp, chan writeOp) {
 					state.config = nil
 					state.grouping = nil
 					if state.index != nil {
-						go func() {
-							err := state.index.Close()
-							if err != nil {
-								log.Printf("Error when closing the index: %s", err)
-							}
-						}()
+						err := state.index.Close()
+						if err != nil {
+							log.Printf("Error when closing the index: %s", err)
+						}
 					}
 					state.index = nil
 				case WriteState:

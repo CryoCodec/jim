@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/CryoCodec/jim/core/services"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
-	"log"
+	"os"
 	"syscall"
 )
 
@@ -11,14 +13,14 @@ func requestPWandDecrypt(uiService services.UiService) {
 	attempt := 3
 	for {
 		if attempt == 0 {
-			log.Fatal("No more attempts left, exiting.")
+			fmt.Printf("No more attempts left, exiting. \n")
 		}
 
 		password := readPasswordFromTerminal()
 		err := uiService.Decrypt(password)
 		if err != nil {
 			attempt--
-			log.Printf("Decryption failed, reason: %s remaining attempts %d", err, attempt)
+			fmt.Printf("Decryption failed, reason: %s remaining attempts %d \n", err, attempt)
 			continue
 		}
 
@@ -27,10 +29,10 @@ func requestPWandDecrypt(uiService services.UiService) {
 }
 
 func readPasswordFromTerminal() []byte {
-	log.Println("Enter master password:")
+	fmt.Println("Enter master password:")
 	bytePassword, err := terminal.ReadPassword(syscall.Stdin)
 	if err != nil {
-		log.Fatal("Error reading the password from terminal")
+		fmt.Println("Error reading the password from terminal:", err)
 	}
 	return bytePassword
 }
@@ -55,5 +57,26 @@ func runPreamble(uiService services.UiService) error {
 				return err
 			}
 		}
+	}
+}
+
+func die(s string) {
+	fmt.Println(s)
+	os.Exit(1)
+}
+
+func dief(s string, el ...interface{}) {
+	fmt.Printf(s, el...)
+	os.Exit(1)
+}
+
+func initLogging() {
+	log.SetFormatter(&log.TextFormatter{DisableTimestamp: true, DisableLevelTruncation: true})
+	if VerbosityLevel >= 2 {
+		log.SetLevel(log.TraceLevel)
+	} else if VerbosityLevel == 1 {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(log.WarnLevel)
 	}
 }

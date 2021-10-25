@@ -1,8 +1,8 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/CryoCodec/jim/core/services"
-	"log"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,26 +14,28 @@ var getCmd = &cobra.Command{
 	Short: "Prints information for given server entry, whose tag matches the args the closest",
 	Long:  `Prints information for given server entry, whose tag matches the args the closest`,
 	Run: func(cmd *cobra.Command, args []string) {
-		uiService := services.NewUiService(Verbose)
+		initLogging()
+
+		uiService := services.NewUiService()
 		defer uiService.ShutDown()
 
 		err := runPreamble(uiService)
 		if err != nil {
-			log.Fatalf("Received unexpected error: %s", err)
+			dief("Received unexpected error: %s", err)
 		}
 
 		query := strings.Join(args, " ")
 		response, err := uiService.GetMatchingServer(query)
 
 		if err != nil {
-			log.Fatal(err)
+			die(err.Error())
 		}
 
-		log.Println("Tag:\t", response.Tag)
-		log.Println("Host:\t", response.Server.Host)
-		log.Println("Directory:\t", response.Server.Dir)
-		log.Println("Username:\t", response.Server.Username)
-		log.Println("Password:\t", string(response.Server.Password))
+		fmt.Println("Tag:\t\t", response.Tag)
+		fmt.Println("Host:\t\t", response.Server.Host)
+		fmt.Println("Directory:\t", response.Server.Dir)
+		fmt.Println("Username:\t", response.Server.Username)
+		fmt.Println("Password:\t", string(response.Server.Password))
 	},
 }
 

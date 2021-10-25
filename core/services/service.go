@@ -6,7 +6,7 @@ import (
 	"github.com/CryoCodec/jim/core/ports"
 	"github.com/CryoCodec/jim/files"
 	"github.com/pkg/errors"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"sort"
 	"strings"
 )
@@ -96,11 +96,9 @@ func (u *UiServiceImpl) ReloadConfigFile() error {
 
 	err = u.ipcPort.LoadConfigFile(path)
 	if err != nil {
-		log.Printf("UiService: error = %s", err)
 		return err
 	}
 
-	log.Printf("UiService: got no error, returning nil")
 	return nil
 }
 
@@ -121,8 +119,7 @@ func (u *UiServiceImpl) ShutDown() {
 }
 
 // NewUiService is the factory method for creating a UiService object.
-func NewUiService(verboseLogging bool) UiService {
-	// TODO treat the verboseLogging flag properly
+func NewUiService() UiService {
 	ipcPort := factory.InstantiateAdapter(factory.InitializeGrpcContext())
 	return &UiServiceImpl{ipcPort: ipcPort}
 }
@@ -136,7 +133,7 @@ func parseFilters(filters []string) (*domain.Filter, error) {
 
 		slice := strings.SplitN(filterString, ":", 2)
 		if len(slice) == 1 { // no prefix used, so it's the free filter.
-			log.Printf("Preparing free filter: %s", slice[0])
+			log.Tracef("Setting free filter: %s", slice[0])
 			filter.FreeFilter = slice[0]
 			continue
 		}
@@ -146,7 +143,7 @@ func parseFilters(filters []string) (*domain.Filter, error) {
 			return nil, errors.Errorf("Encountered invalid filter: %s", filterString)
 		}
 
-		log.Printf("Preparing filter with category %s and value %s", slice[0], slice[1])
+		log.Tracef("Setting filter with category %s and value %s", slice[0], slice[1])
 		switch strings.ToLower(slice[0]) {
 		case "env":
 			filter.EnvFilter = slice[1]

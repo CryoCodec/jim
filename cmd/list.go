@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/CryoCodec/jim/core/services"
 	"github.com/spf13/cobra"
-	"log"
 	"math"
 )
 
@@ -18,20 +17,22 @@ var listCmd = &cobra.Command{
 	Long:  `Lists all entries in the configuration file`,
 	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		uiService := services.NewUiService(Verbose)
+		initLogging()
+
+		uiService := services.NewUiService()
 		defer uiService.ShutDown()
 
 		// makes sure the server is in the correct state.
 		// might ask the user to enter the master password.
 		err := runPreamble(uiService)
 		if err != nil {
-			log.Fatalf("Received unexpected error: %s", err)
+			dief("Received unexpected error: %s", err)
 		}
 
 		groups, err := uiService.GetEntries(filters, int(limit))
 
 		if err != nil {
-			log.Fatal(err)
+			die(err.Error())
 		}
 
 		fmt.Println()

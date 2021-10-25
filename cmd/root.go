@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var Verbose = false
+var VerbosityLevel = 0
 var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
@@ -27,8 +27,7 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-
-	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")
+	rootCmd.PersistentFlags().CountVarP(&VerbosityLevel, "", "v", "verbose output, use multiple 'v' for more detailed information (-v, or -vv)")
 }
 
 // initConfig reads in config file and ENV variables if set.
