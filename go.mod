@@ -3,7 +3,7 @@ module github.com/CryoCodec/jim
 go 1.16
 
 require (
-	github.com/blevesearch/bleve/v2 v2.2.1
+	github.com/blevesearch/bleve/v2 v2.3.2
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/pkg/errors v0.9.1
