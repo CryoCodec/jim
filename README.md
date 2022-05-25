@@ -1,6 +1,6 @@
 # jim
-![build](https://github.com/CryoCodec/jim/actions/workflows/build.yml/badge.svg
-)
+![build](https://github.com/CryoCodec/jim/actions/workflows/build.yml/badge.svg)
+[![Go Report Card](https://goreportcard.com/badge/github.com/CryoCodec/jim)](https://goreportcard.com/report/github.com/CryoCodec/jim)
 
 Jim is a cli tool for connecting to different servers via SSH with ease. 
 Jim is for you, if you're tired of remembering/entering server specific data for authentication. 
