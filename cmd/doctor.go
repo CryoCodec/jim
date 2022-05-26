@@ -29,7 +29,7 @@ var doctorCmd = &cobra.Command{
 			fmt.Println("Directory does not exist, creating it...")
 			err := os.Mkdir(jimDir, 0740)
 			if err != nil {
-				dief("Failed to create jim's config directory", jimDir)
+				dief("Failed to create jim's config directory %s", jimDir)
 			} else {
 				fmt.Println("---> Success")
 			}

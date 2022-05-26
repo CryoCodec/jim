@@ -19,7 +19,7 @@ func main() {
 	fmt.Println("Clearing old socket instance")
 	clearSocket(sockAddr)
 
-	c := make(chan os.Signal)
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c

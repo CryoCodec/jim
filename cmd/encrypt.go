@@ -13,7 +13,7 @@ import (
 	"github.com/CryoCodec/jim/crypto"
 	"github.com/CryoCodec/jim/files"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 // encryptCmd represents the encrypt command
@@ -36,7 +36,7 @@ var encryptCmd = &cobra.Command{
 		}
 
 		fmt.Println("Enter master password:")
-		password, err := terminal.ReadPassword(syscall.Stdin)
+		password, err := term.ReadPassword(syscall.Stdin)
 		if err != nil {
 			die("Error reading the password from terminal. Try again.")
 		}

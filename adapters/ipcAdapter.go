@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"net"
 	"time"
 )
@@ -231,7 +232,7 @@ func InitializeGrpcContext() *GrpcContext {
 		return net.Dial(config.Protocol, addr)
 	}
 
-	conn, err := grpc.Dial(config.GetSocketAddress(), grpc.WithInsecure(), grpc.WithContextDialer(dialer), withClientUnaryInterceptor())
+	conn, err := grpc.Dial(config.GetSocketAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(dialer), withClientUnaryInterceptor())
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -58,7 +58,7 @@ var connectCmd = &cobra.Command{
 		fmt.Printf("Connecting to %s -> %s \n", response.Tag, response.Server.Dir)
 		err = connectToServer(&response.Server)
 		if err != nil {
-			dief("Error: ", err.Error())
+			dief("Error: %s", err.Error())
 		}
 	},
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/CryoCodec/jim/core/services"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 	"os"
 	"syscall"
 )
@@ -30,7 +30,7 @@ func requestPWandDecrypt(uiService services.UiService) {
 
 func readPasswordFromTerminal() []byte {
 	fmt.Println("Enter master password:")
-	bytePassword, err := terminal.ReadPassword(syscall.Stdin)
+	bytePassword, err := term.ReadPassword(syscall.Stdin)
 	if err != nil {
 		fmt.Println("Error reading the password from terminal:", err)
 	}

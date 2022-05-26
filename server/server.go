@@ -69,7 +69,6 @@ type opType int
 
 const (
 	ReadServerState = iota
-	ReadContent
 	WriteCloseState
 	WriteState
 )
@@ -93,9 +92,6 @@ func initializeStateManager() (chan readOp, chan writeOp) {
 				switch read.opType {
 				case ReadServerState:
 					read.resp <- state
-
-				case ReadContent:
-					read.resp <- state.config
 				}
 			case write := <-writes:
 				switch write.opType {
@@ -376,13 +372,6 @@ func (j JimServiceImpl) readState() serverState {
 	j.readChannel <- readOp{opType: ReadServerState, resp: resp}
 	val := <-resp
 	return val.(serverState)
-}
-
-func (j JimServiceImpl) readContent() configuration.JimConfig {
-	resp := make(chan interface{})
-	j.readChannel <- readOp{opType: ReadContent, resp: resp}
-	val := <-resp
-	return val.(configuration.JimConfig)
 }
 
 type serverState struct {

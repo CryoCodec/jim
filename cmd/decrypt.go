@@ -15,7 +15,7 @@ import (
 	"github.com/CryoCodec/jim/crypto"
 	"github.com/CryoCodec/jim/files"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 )
 
 // decryptCmd represents the decrypt command
@@ -37,16 +37,16 @@ var decryptCmd = &cobra.Command{
 
 		fileContents, err := ioutil.ReadFile(args[0])
 		if err != nil {
-			dief("Error reading file: ", err)
+			dief("Error reading file: %s", err)
 		}
 
 		cipherText, err := b64.StdEncoding.DecodeString(string(fileContents))
 		if err != nil {
-			dief("Corrupt input file, failed at base64 decode. Reason: ", err)
+			dief("Corrupt input file, failed at base64 decode. Reason: %s", err)
 		}
 
 		log.Println("Enter master password:")
-		password, err := terminal.ReadPassword(syscall.Stdin)
+		password, err := term.ReadPassword(syscall.Stdin)
 		if err != nil {
 			die("Error reading the password from terminal. Try again.")
 
@@ -54,7 +54,7 @@ var decryptCmd = &cobra.Command{
 
 		clearText, err := crypto.Decrypt(password, cipherText)
 		if err != nil {
-			dief("Failed to decrypt the given content. Reason: ", err)
+			dief("Failed to decrypt the given content. Reason: %s", err)
 		}
 
 		destinationPath := strings.TrimSuffix(args[0], ".enc")
