@@ -27,7 +27,7 @@ type UiService interface {
 	// Decrypt attempts to decrypt the config file on the server.
 	// Before calling this method ensure the server is in the right state
 	// to accept a password.
-	Decrypt(password []byte) error
+	Decrypt(password []byte) (chan domain.DecryptStep, error)
 
 	// ReloadConfigFile makes the server reload the config file.
 	// This method sets the server to a new state, requiring a password
@@ -77,15 +77,15 @@ func (u *UiServiceImpl) MatchClosestN(query string) []string {
 	return u.ipcPort.MatchClosestN(query)
 }
 
-func (u *UiServiceImpl) Decrypt(password []byte) error {
+func (u *UiServiceImpl) Decrypt(password []byte) (chan domain.DecryptStep, error) {
 	ipcPort := u.ipcPort
-	err := ipcPort.AttemptDecryption(password)
+	channel, err := ipcPort.AttemptDecryption(password)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return channel, nil
 }
 
 func (u *UiServiceImpl) ReloadConfigFile() error {

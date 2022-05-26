@@ -9,7 +9,7 @@ type IpcPort interface {
 	// LoadConfigFile requests the daemon process to load a config file
 	LoadConfigFile(path string) error
 	// AttemptDecryption requests a decryption attempt from the daemon, using the passed password
-	AttemptDecryption(password []byte) error
+	AttemptDecryption(password []byte) (chan domain.DecryptStep, error)
 	// GetMatchingServer requests a server entry from the daemon, that matches the given query string.
 	// Requires the daemon to be in ready state.
 	GetMatchingServer(query string) (*domain.Match, error)

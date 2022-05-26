@@ -169,51 +169,56 @@ func (j JimServiceImpl) LoadConfigFile(ctx context.Context, request *pb.LoadRequ
 	}, nil
 }
 
-func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest) (*pb.DecryptReply, error) {
+func (j JimServiceImpl) Decrypt(req *pb.DecryptRequest, stream pb.Jim_DecryptServer) error {
 	defer timeTrack(time.Now(), "Decrypt")
 
 	state := j.readState()
 	if state.encryptedFileContents == nil {
-		return &pb.DecryptReply{
-			ResponseType: pb.ResponseType_FAILURE,
-			Reason:       "No configuration was loaded.",
-		}, nil
+		return sendDecryptUpdate(stream, decryptReplyFail(pb.StepName_VALIDATE, "No configuration file was loaded."))
 	}
 
 	if state.isDecrypted {
-		return &pb.DecryptReply{
-			ResponseType: pb.ResponseType_SUCCESS,
-			Reason:       "Already in decrypted state.",
-		}, nil
+		return sendDecryptUpdate(stream, decryptReplySuccess(pb.StepName_DONE))
 	}
 
 	cipherText, err := b64.StdEncoding.DecodeString(string(state.encryptedFileContents))
 	if err != nil {
-		return &pb.DecryptReply{
-			ResponseType: pb.ResponseType_FAILURE,
-			Reason:       fmt.Sprintf("Corrupt configuration file, failed at base64 decode. Reason: %s", err.Error()),
-		}, nil
+		return sendDecryptUpdate(stream, decryptReplyFail(pb.StepName_DECODE_BASE64, fmt.Sprintf("Corrupt configuration file, failed at base64 decode. Reason: %s", err.Error())))
+	} else {
+		err := sendDecryptUpdate(stream, decryptReplySuccess(pb.StepName_DECODE_BASE64))
+		if err != nil {
+			return err
+		}
 	}
 
-	clearText, err := crypto.Decrypt(request.Password, cipherText)
+	clearText, err := crypto.Decrypt(req.Password, cipherText)
 	if err != nil {
-		return &pb.DecryptReply{
-			ResponseType: pb.ResponseType_FAILURE,
-			Reason:       fmt.Sprintf("Failed to decrypt the configuration file. Reason: %s", err.Error()),
-		}, nil
+		return sendDecryptUpdate(stream, decryptReplyFail(pb.StepName_DECRYPT, fmt.Sprintf("Failed to decrypt the configuration file. Reason: %s", err.Error())))
+	} else {
+		err := sendDecryptUpdate(stream, decryptReplySuccess(pb.StepName_DECRYPT))
+		if err != nil {
+			return err
+		}
 	}
 
 	parsed, err := configuration.UnmarshalJimConfig(clearText)
 	if err != nil {
-		return &pb.DecryptReply{
-			ResponseType: pb.ResponseType_FAILURE,
-			Reason:       fmt.Sprintf("Failed to unmarshal json config. Reason: %s", err.Error()),
-		}, nil
+		return sendDecryptUpdate(stream, decryptReplyFail(pb.StepName_UNMARSHAL, fmt.Sprintf("Failed to unmarshal json config. Reason: %s", err.Error())))
+	} else {
+		err := sendDecryptUpdate(stream, decryptReplySuccess(pb.StepName_UNMARSHAL))
+		if err != nil {
+			return err
+		}
 	}
 
 	resultConfig, err := toServerConfig(&parsed)
 	if err != nil {
-		return nil, err
+		return sendDecryptUpdate(stream, decryptReplyFail(pb.StepName_VALIDATE, err.Error()))
+	} else {
+		err := sendDecryptUpdate(stream, decryptReplySuccess(pb.StepName_VALIDATE))
+		if err != nil {
+			return err
+		}
 	}
 
 	// create the bleve index
@@ -254,7 +259,12 @@ func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest)
 
 	result := <-returnChan
 	if result.err != nil {
-		return nil, err
+		return sendDecryptUpdate(stream, decryptReplyFail(pb.StepName_BUILD_INDEX, err.Error()))
+	} else {
+		err := sendDecryptUpdate(stream, decryptReplySuccess(pb.StepName_BUILD_INDEX))
+		if err != nil {
+			return err
+		}
 	}
 
 	newState := &serverState{
@@ -267,10 +277,34 @@ func (j JimServiceImpl) Decrypt(ctx context.Context, request *pb.DecryptRequest)
 
 	j.writeChannel <- writeOp{newState: newState, opType: WriteState}
 
+	err = sendDecryptUpdate(stream, decryptReplySuccess(pb.StepName_DONE))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func decryptReplyFail(name pb.StepName, reason string) *pb.DecryptReply {
+	return &pb.DecryptReply{
+		ResponseType: pb.ResponseType_FAILURE,
+		Step:         name,
+		Reason:       reason,
+	}
+}
+
+func decryptReplySuccess(name pb.StepName) *pb.DecryptReply {
 	return &pb.DecryptReply{
 		ResponseType: pb.ResponseType_SUCCESS,
-		Reason:       "Decrypted config file successfully.",
-	}, nil
+		Step:         name,
+	}
+}
+
+func sendDecryptUpdate(stream pb.Jim_DecryptServer, reply *pb.DecryptReply) error {
+	if err := stream.Send(reply); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (j JimServiceImpl) Match(ctx context.Context, request *pb.MatchRequest) (*pb.MatchReply, error) {

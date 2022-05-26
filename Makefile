@@ -39,12 +39,12 @@ protoc: _gen-go-out
 _download-protoc-mac-x86_64:
 	mkdir -p tmp && \
 	cd tmp && \
-	curl -L https://github.com/protocolbuffers/protobuf/releases/download/v3.18.1/protoc-3.18.1-osx-x86_64.zip --output protoc.zip
+	curl -L https://github.com/protocolbuffers/protobuf/releases/download/v21.0/protoc-21.0-osx-x86_64.zip --output protoc.zip
 
 _download-protoc-linux-x86_64:
 	mkdir -p tmp && \
 	cd tmp && \
-	curl -L https://github.com/protocolbuffers/protobuf/releases/download/v3.18.1/protoc-3.18.1-linux-x86_64.zip --output protoc.zip
+	curl -L https://github.com/protocolbuffers/protobuf/releases/download/v21.0/protoc-21.0-linux-x86_64.zip --output protoc.zip
 
 
 _unzip-protoc:
@@ -62,7 +62,7 @@ _cleanup-tmp:
 
 _goget-grpc:
 	go get -u google.golang.org/grpc
-	go get -u github.com/golang/protobuf/protoc-gen-go
+	go get -u google.golang.org/protobuf
 
 _gen-go-out:
 	mkdir -p internal

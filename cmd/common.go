@@ -2,30 +2,132 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/CryoCodec/jim/core/domain"
 	"github.com/CryoCodec/jim/core/services"
+	"github.com/fatih/color"
 	log "github.com/sirupsen/logrus"
+	"github.com/theckman/yacspin"
 	"golang.org/x/term"
 	"os"
+	"strings"
 	"syscall"
+	"time"
 )
 
+// Create SprintXxx functions to mix strings with other non-colorized strings:
+var green = color.New(color.FgGreen).SprintFunc()
+var red = color.New(color.FgRed).SprintFunc()
+
 func requestPWandDecrypt(uiService services.UiService) {
+	enabledSpinner := true
 	attempt := 3
+outer:
 	for {
 		if attempt == 0 {
-			fmt.Printf("No more attempts left, exiting. \n")
+			die("No more attempts left, exiting. \n")
 		}
 
 		password := readPasswordFromTerminal()
-		err := uiService.Decrypt(password)
+		spinner, err := createSpinner()
 		if err != nil {
-			attempt--
-			fmt.Printf("Decryption failed, reason: %s remaining attempts %d \n", err, attempt)
-			continue
+			enabledSpinner = false
 		}
+		updateSpinnerText(spinner, "Decoding configuration file")
 
-		return
+		if enabledSpinner {
+			err = spinner.Start()
+			log.Debugf("failed to start the spinner, running without fancy graphics")
+			enabledSpinner = false
+		}
+		channel, err := uiService.Decrypt(password)
+		if err != nil {
+			dief("\n Encountered an unexpected error: %s", err)
+		}
+		for update := range channel {
+			log.Debugf("received decrypt update: %s", update)
+			if update.Error != nil {
+				dief("Encountered an unexpected error: %s", update.Error)
+			}
+
+			if !update.IsSuccess {
+				spinner.StopFail()
+				switch update.StepType {
+				case domain.Decrypt:
+					attempt--
+					spinner.StopFail()
+					fmt.Printf("Decryption failed, reason: %s remaining attempts %d \n", update.Reason, attempt)
+					break outer
+				case domain.DecodeBase64:
+					fallthrough
+				case domain.Validate:
+					fallthrough
+				case domain.Unmarshal:
+					fallthrough
+				case domain.BuildIndex:
+					fmt.Printf("Reason: %s", update.Reason)
+				}
+
+				fmt.Printf("Your configuration file seems to be invalid. Please run 'jim validate' for help")
+			}
+
+			switch update.StepType {
+			case domain.Done:
+				spinner.Stop()
+				return
+			case domain.DecodeBase64:
+				spinner.Stop()
+				updateSpinnerText(spinner, "Decrypting configuration file")
+				spinner.Start()
+			case domain.Decrypt:
+				spinner.Stop()
+				updateSpinnerText(spinner, "Unmarshalling configuration file")
+				spinner.Start()
+			case domain.Unmarshal:
+				spinner.Stop()
+				updateSpinnerText(spinner, "Validating configuration file")
+				spinner.Start()
+			case domain.Validate:
+				spinner.Stop()
+				updateSpinnerText(spinner, "Building search index")
+				spinner.Start()
+			case domain.BuildIndex:
+				spinner.Stop()
+				updateSpinnerText(spinner, "Writing State")
+				spinner.Start()
+			}
+		}
 	}
+}
+
+func createSpinner() (*yacspin.Spinner, error) {
+	// build the configuration, each field is documented
+	cfg := yacspin.Config{
+		Frequency:         100 * time.Millisecond,
+		CharSet:           yacspin.CharSets[11],
+		Suffix:            " ", // puts a least one space between the animating spinner and the Message
+		SuffixAutoColon:   true,
+		ColorAll:          true,
+		Colors:            []string{"fgYellow"},
+		StopCharacter:     "✓",
+		StopColors:        []string{"fgGreen"},
+		StopMessage:       "done",
+		StopFailCharacter: "✗",
+		StopFailColors:    []string{"fgRed"},
+		StopFailMessage:   "failed",
+	}
+
+	s, err := yacspin.New(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make spinner from struct: %w", err)
+	}
+
+	return s, nil
+}
+
+func updateSpinnerText(s *yacspin.Spinner, msg string) {
+	offsetNr := 40 - len(msg)
+	offset := strings.Repeat(" ", offsetNr)
+	s.Prefix(fmt.Sprintf("%s %s", msg, offset))
 }
 
 func readPasswordFromTerminal() []byte {

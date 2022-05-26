@@ -11,6 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"io"
 	"net"
 	"time"
 )
@@ -178,21 +179,63 @@ func (adapter *ipcAdapterImpl) ServerStatus() (*domain.ServerState, error) {
 }
 
 // AttemptDecryption asks the server to try decryption of the config file with the given password.
-func (adapter *ipcAdapterImpl) AttemptDecryption(password []byte) error {
+func (adapter *ipcAdapterImpl) AttemptDecryption(password []byte) (chan domain.DecryptStep, error) {
 	client := adapter.grpcContext.client
-	ctx, cancel := adapter.grpcContext.newTimedCtx(5 * time.Second)
-	defer cancel()
-	response, err := client.Decrypt(ctx, &pb.DecryptRequest{Password: password})
+	ctx, _ := adapter.grpcContext.newTimedCtx(15 * time.Second)
+	stream, err := client.Decrypt(ctx, &pb.DecryptRequest{Password: password})
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if response.ResponseType == pb.ResponseType_FAILURE {
-		return errors.New(response.Reason)
-	}
+	channel := make(chan domain.DecryptStep, 3)
+	go func() {
+		for {
+			response, err := stream.Recv()
 
-	return nil
+			// stream closed naturally
+			if err == io.EOF {
+				close(channel)
+				break
+			}
+
+			// stream returned error response,
+			// the server doesn't use those, so it must be a protocol issue
+			if err != nil {
+				channel <- *domain.NewErrorDecryptStep(err)
+				close(channel)
+				break
+			}
+
+			if response.ResponseType == pb.ResponseType_FAILURE {
+				update := domain.NewFailedDecryptStep(mapStepType(response.Step), response.Reason)
+				channel <- *update
+			} else {
+				update := domain.NewSuccessfulDecryptStep(mapStepType(response.Step))
+				channel <- *update
+			}
+		}
+	}()
+
+	return channel, nil
+}
+
+func mapStepType(name pb.StepName) domain.Step {
+	switch name {
+	case pb.StepName_DECRYPT:
+		return domain.Decrypt
+	case pb.StepName_DECODE_BASE64:
+		return domain.DecodeBase64
+	case pb.StepName_UNMARSHAL:
+		return domain.Unmarshal
+	case pb.StepName_VALIDATE:
+		return domain.Validate
+	case pb.StepName_BUILD_INDEX:
+		return domain.BuildIndex
+	case pb.StepName_DONE:
+		return domain.Done
+	}
+	panic(fmt.Sprintf("encountered unsupported step name %s", name.String()))
 }
 
 // Close closes the underlying ipc connection

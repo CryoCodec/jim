@@ -120,3 +120,39 @@ func (f Filter) HasFreeFilter() bool {
 func (f Filter) IsAnyFilterSet() bool {
 	return f.HasEnvFilter() || f.HasTagFilter() || f.HasGroupFilter() || f.HasHostFilter() || f.HasFreeFilter()
 }
+
+type Step = int
+
+const (
+	Decrypt = iota
+	DecodeBase64
+	Unmarshal
+	Validate
+	BuildIndex
+	Done
+)
+
+// DecryptStep holds updates given by the server
+// during decryption
+type DecryptStep struct {
+	// whether the step was successful or not
+	IsSuccess bool
+	// what step was performed
+	StepType Step
+	// the reason for failure, if the step was unsuccessful
+	Reason string
+	// only used if something went wrong on the protocol side
+	Error error
+}
+
+func NewSuccessfulDecryptStep(stepType Step) *DecryptStep {
+	return &DecryptStep{IsSuccess: true, StepType: stepType}
+}
+
+func NewFailedDecryptStep(stepType Step, reason string) *DecryptStep {
+	return &DecryptStep{IsSuccess: false, StepType: stepType, Reason: reason}
+}
+
+func NewErrorDecryptStep(err error) *DecryptStep {
+	return &DecryptStep{Error: err}
+}

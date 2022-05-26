@@ -10,7 +10,7 @@ service Jim {
   rpc LoadConfigFile (LoadRequest) returns (LoadReply) {}
 
   // attempts to decrypt the loaded config file
-  rpc Decrypt (DecryptRequest) returns (DecryptReply) {}
+  rpc Decrypt (DecryptRequest) returns (stream DecryptReply) {}
 
   // returns the config entry matching the query string the best
   rpc Match (MatchRequest) returns (MatchReply) {}
@@ -61,7 +61,17 @@ message DecryptRequest {
 // Answers a DecryptRequest
 message DecryptReply {
   ResponseType responseType = 1;
-  string reason = 2;
+  StepName step = 2;
+  string reason = 3;
+}
+
+enum StepName {
+  DECRYPT = 0;
+  DECODE_BASE64 = 1;
+  UNMARSHAL = 2;
+  VALIDATE = 3;
+  BUILD_INDEX = 4;
+  DONE = 5;
 }
 
 // Asks the server for the config entry
