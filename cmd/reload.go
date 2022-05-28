@@ -19,9 +19,9 @@ var reloadCmd = &cobra.Command{
 		defer uiService.ShutDown()
 		err := uiService.ReloadConfigFile()
 		if err == nil {
-			fmt.Printf("---> Success")
+			fmt.Print(green("✓ done"))
 		} else {
-			fmt.Printf("error: %s", err)
+			fmt.Print(red("✗ failed. Reason: %s", err))
 		}
 	},
 }
