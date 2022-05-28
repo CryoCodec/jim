@@ -15,8 +15,9 @@ import (
 )
 
 // Create SprintXxx functions to mix strings with other non-colorized strings:
-var green = color.New(color.FgGreen).SprintFunc()
-var red = color.New(color.FgRed).SprintFunc()
+var green = color.New(color.FgGreen).SprintfFunc()
+var red = color.New(color.FgRed).SprintfFunc()
+var yellow = color.New(color.FgYellow).SprintfFunc()
 
 func requestPWandDecrypt(uiService services.UiService) {
 	enabledSpinner := true
@@ -28,11 +29,11 @@ outer:
 		}
 
 		password := readPasswordFromTerminal()
-		spinner, err := createSpinner()
+		spinner, err := CreateSpinner()
 		if err != nil {
 			enabledSpinner = false
 		}
-		updateSpinnerText(spinner, "Decoding configuration file")
+		updateSpinnerPrefix(spinner, "Decoding configuration file")
 
 		if enabledSpinner {
 			err = spinner.Start()
@@ -76,30 +77,30 @@ outer:
 				return
 			case domain.DecodeBase64:
 				spinner.Stop()
-				updateSpinnerText(spinner, "Decrypting configuration file")
+				updateSpinnerPrefix(spinner, "Decrypting configuration file")
 				spinner.Start()
 			case domain.Decrypt:
 				spinner.Stop()
-				updateSpinnerText(spinner, "Unmarshalling configuration file")
+				updateSpinnerPrefix(spinner, "Unmarshalling configuration file")
 				spinner.Start()
 			case domain.Unmarshal:
 				spinner.Stop()
-				updateSpinnerText(spinner, "Validating configuration file")
+				updateSpinnerPrefix(spinner, "Validating configuration file")
 				spinner.Start()
 			case domain.Validate:
 				spinner.Stop()
-				updateSpinnerText(spinner, "Building search index")
+				updateSpinnerPrefix(spinner, "Building search index")
 				spinner.Start()
 			case domain.BuildIndex:
 				spinner.Stop()
-				updateSpinnerText(spinner, "Writing State")
+				updateSpinnerPrefix(spinner, "Writing State")
 				spinner.Start()
 			}
 		}
 	}
 }
 
-func createSpinner() (*yacspin.Spinner, error) {
+func CreateSpinner() (*yacspin.Spinner, error) {
 	// build the configuration, each field is documented
 	cfg := yacspin.Config{
 		Frequency:         100 * time.Millisecond,
@@ -124,7 +125,7 @@ func createSpinner() (*yacspin.Spinner, error) {
 	return s, nil
 }
 
-func updateSpinnerText(s *yacspin.Spinner, msg string) {
+func updateSpinnerPrefix(s *yacspin.Spinner, msg string) {
 	offsetNr := 40 - len(msg)
 	offset := strings.Repeat(" ", offsetNr)
 	s.Prefix(fmt.Sprintf("%s %s", msg, offset))
